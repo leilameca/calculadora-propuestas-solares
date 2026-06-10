@@ -47,16 +47,17 @@ body {
 /* ─── TOPBAR ─── */
 .topbar {
   background: var(--c-header-bg);
-  color: var(--c-header-text);
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
   position: sticky;
   top: 0;
   z-index: 200;
-  gap: 12px;
+}
+.topbar-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 48px;
+  gap: 10px;
 }
 .topbar-brand {
   font-size: 13px;
@@ -67,35 +68,12 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.topbar-brand span {
-  color: #60a5fa;
-}
-.tab-nav {
-  display: flex;
-  gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tab-nav::-webkit-scrollbar { display: none; }
-.tab-nav button {
-  background: transparent;
-  border: none;
-  color: #9ca3af;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: all var(--transition);
-}
-.tab-nav button:hover { color: #f9fafb; background: rgba(255,255,255,.08); }
-.tab-nav button.active { color: var(--c-header-bg); background: #60a5fa; font-weight: 700; }
+.topbar-brand span { color: #60a5fa; }
 .btn-calc {
   background: #2563eb;
   color: #fff;
   border: none;
-  padding: 7px 18px;
+  padding: 7px 16px;
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   font-weight: 700;
@@ -106,6 +84,31 @@ body {
 }
 .btn-calc:hover { background: #1d4ed8; }
 .btn-calc:active { background: #1e40af; }
+.tab-nav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 10px 6px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.2);
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-nav button {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.tab-nav button:hover { color: #f9fafb; background: rgba(255,255,255,.08); }
+.tab-nav button.active { color: var(--c-header-bg); background: #60a5fa; font-weight: 700; }
 
 /* ─── LAYOUT ─── */
 .wrapper { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
@@ -485,7 +488,10 @@ tfoot td { padding: 10px 14px; font-weight: 700; background: #f1f5f9; border-top
 <body>
 
 <nav class="topbar">
-  <div class="topbar-brand">Calculadora <span>Solar</span> RD</div>
+  <div class="topbar-row1">
+    <div class="topbar-brand">Calculadora <span>Solar</span> RD</div>
+    <button class="btn-calc" onclick="calcular()">Calcular</button>
+  </div>
   <div class="tab-nav">
     <button class="active" onclick="showPage('datos')">Datos</button>
     <button onclick="showPage('calculo')">Calculo</button>
@@ -493,7 +499,6 @@ tfoot td { padding: 10px 14px; font-weight: 700; background: #f1f5f9; border-top
     <button onclick="showPage('graficos')">Graficos</button>
     <button onclick="showPage('propuesta')">Propuesta</button>
   </div>
-  <button class="btn-calc" onclick="calcular()">Calcular</button>
 </nav>
 
 <div class="wrapper">
