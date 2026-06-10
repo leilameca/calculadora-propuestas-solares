@@ -895,10 +895,11 @@ function applyAverage() {
   }
   if (filled.length === 0) { alert('Ingresa al menos un valor de consumo primero.'); return; }
   const avg = Math.round(filled.reduce((a,b) => a+b, 0) / filled.length);
-  // Show reference only — never overwrite the month inputs
+  MESES.forEach((_, i) => { document.getElementById(`cons_${i}`).value = avg; });
   document.getElementById('avg_ref_box').style.display = '';
   set('avg_reference', fmt(avg));
-  set('avg_ref_label', `ultimos ${filled.length} meses`);
+  set('avg_ref_label', `promedio aplicado a los 12 meses`);
+  updateConsTotals();
 }
 
 // ─── CONSUMPTION TOTALS ─────────────────────────────────────────────────────
