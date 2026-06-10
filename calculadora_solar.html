@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora Solar — República Dominicana</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --c-bg: #f0f2f5;
+  --c-surface: #ffffff;
+  --c-border: #dde1e7;
+  --c-border-focus: #2563eb;
+  --c-text: #111827;
+  --c-text-2: #6b7280;
+  --c-text-3: #9ca3af;
+  --c-accent: #2563eb;
+  --c-accent-light: #eff6ff;
+  --c-amber: #d97706;
+  --c-amber-light: #fffbeb;
+  --c-amber-border: #fcd34d;
+  --c-green: #059669;
+  --c-green-light: #ecfdf5;
+  --c-red: #dc2626;
+  --c-red-light: #fef2f2;
+  --c-header-bg: #111827;
+  --c-header-text: #f9fafb;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+  --transition: 150ms ease;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── TOPBAR ─── */
+.topbar {
+  background: var(--c-header-bg);
+  color: var(--c-header-text);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  gap: 12px;
+}
+.topbar-brand {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #f9fafb;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.topbar-brand span {
+  color: #60a5fa;
+}
+.tab-nav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-nav button {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+.tab-nav button:hover { color: #f9fafb; background: rgba(255,255,255,.08); }
+.tab-nav button.active { color: var(--c-header-bg); background: #60a5fa; font-weight: 700; }
+.btn-calc {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 7px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.btn-calc:hover { background: #1d4ed8; }
+.btn-calc:active { background: #1e40af; }
+
+/* ─── LAYOUT ─── */
+.wrapper { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* ─── CARD ─── */
+.card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.card + .card { }
+.card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--c-text-2);
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* ─── GRID ─── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 900px) { .g4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) {
+  .g2, .g3, .g4 { grid-template-columns: 1fr; }
+  .wrapper { padding: 14px 12px 32px; }
+  .card { padding: 16px; }
+}
+
+/* ─── FORM FIELDS ─── */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--c-text-2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.field input,
+.field select {
+  border: 1.5px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13.5px;
+  color: var(--c-text);
+  background: var(--c-surface);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--c-border-focus);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+.field input.input-editable { background: var(--c-amber-light); border-color: var(--c-amber-border); }
+.field input.input-editable:focus { border-color: var(--c-accent); }
+.field select.input-editable { background: var(--c-amber-light); border-color: var(--c-amber-border); }
+.field input[readonly] {
+  background: #f8fafc;
+  color: var(--c-text-2);
+  cursor: default;
+  border-style: dashed;
+  border-color: #d1d5db;
+}
+.field .hint { font-size: 11px; color: var(--c-text-3); margin-top: 2px; }
+
+/* ─── MONTHS GRID ─── */
+.months-container { }
+.months-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.months-header-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--c-text-2); }
+.avg-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+}
+.avg-selector label { font-size: 12px; color: var(--c-text-2); font-weight: 500; white-space: nowrap; }
+.avg-selector select {
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--c-accent);
+  cursor: pointer;
+  padding: 0;
+}
+.avg-selector select:focus { outline: none; }
+.btn-apply-avg {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.btn-apply-avg:hover { background: #1d4ed8; }
+
+.months-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 700px) { .months-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 480px) { .months-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.month-cell label { font-size: 11.5px; font-weight: 600; color: var(--c-text-2); }
+.month-cell input {
+  border: 1.5px solid var(--c-amber-border);
+  background: var(--c-amber-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+  text-align: right;
+  width: 100%;
+}
+.month-cell input:focus { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.month-cell input::placeholder { color: var(--c-text-3); }
+
+.totals-strip {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 14px;
+}
+.total-item {
+  flex: 1;
+  padding: 12px 16px;
+  border-right: 1px solid var(--c-border);
+  text-align: center;
+}
+.total-item:last-child { border-right: none; }
+.total-item .tv { font-size: 18px; font-weight: 800; color: var(--c-text); }
+.total-item .tl { font-size: 11px; color: var(--c-text-2); margin-top: 2px; font-weight: 500; }
+@media (max-width: 480px) { .totals-strip { flex-direction: column; } .total-item { border-right: none; border-bottom: 1px solid var(--c-border); } .total-item:last-child { border-bottom: none; } }
+
+/* ─── STAT CARDS ─── */
+.stat-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+.stat-card .sv { font-size: 22px; font-weight: 800; color: var(--c-text); line-height: 1.1; }
+.stat-card .su { font-size: 11px; color: var(--c-text-3); font-weight: 600; letter-spacing: .03em; }
+.stat-card .sl { font-size: 12px; color: var(--c-text-2); margin-top: 6px; font-weight: 500; }
+.stat-card.accent .sv { color: var(--c-accent); }
+.stat-card.green .sv { color: var(--c-green); }
+.stat-card.amber .sv { color: var(--c-amber); }
+
+/* ─── TABLE ─── */
+.tbl-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--c-border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  background: var(--c-header-bg);
+  color: #d1d5db;
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+tbody tr:nth-child(even) { background: #fafafa; }
+tbody tr:hover { background: var(--c-accent-light); }
+tbody td { padding: 9px 14px; border-bottom: 1px solid var(--c-border); white-space: nowrap; }
+tfoot td { padding: 10px 14px; font-weight: 700; background: #f1f5f9; border-top: 2px solid var(--c-border); }
+.tr { text-align: right; }
+.tc { text-align: center; }
+
+/* ─── CHARTS ─── */
+.chart-wrap { position: relative; height: 300px; }
+.chart-wrap-tall { position: relative; height: 340px; }
+
+/* ─── PROPOSAL ─── */
+.proposal-shell {
+  max-width: 800px;
+  margin: 0 auto;
+}
+.proposal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.btn-secondary {
+  background: var(--c-surface);
+  border: 1.5px solid var(--c-border);
+  color: var(--c-text);
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-secondary:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.proposal-doc {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  box-shadow: var(--shadow);
+}
+@media (max-width: 600px) { .proposal-doc { padding: 20px 16px; } }
+
+.prop-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--c-text);
+  margin-bottom: 24px;
+}
+.prop-company-name {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.prop-company-sub {
+  font-size: 11.5px;
+  color: var(--c-text-2);
+  margin-top: 4px;
+}
+.prop-meta { text-align: right; font-size: 12px; color: var(--c-text-2); line-height: 1.8; }
+
+.prop-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--c-text-2);
+  margin: 22px 0 8px;
+}
+
+.prop-client-header { text-align: center; margin-bottom: 20px; }
+.prop-client-header .pch-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--c-text-3); font-weight: 700; }
+.prop-client-header .pch-name { font-size: 26px; font-weight: 900; line-height: 1.1; margin-top: 4px; }
+.prop-client-header .pch-meta { font-size: 12px; color: var(--c-text-2); margin-top: 6px; }
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+}
+.kpi-box {
+  background: var(--c-header-bg);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 16px 12px;
+  text-align: center;
+}
+.kpi-box .kv { font-size: 18px; font-weight: 900; color: #60a5fa; line-height: 1.1; }
+.kpi-box .kl { font-size: 10.5px; color: #9ca3af; margin-top: 4px; font-weight: 500; }
+
+.spec-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 2px; }
+@media (max-width: 560px) { .spec-cols { grid-template-columns: 1fr; } .kpi-row { grid-template-columns: 1fr 1fr; } }
+.spec-tbl { width: 100%; border-collapse: collapse; }
+.spec-tbl td { padding: 7px 10px; border-bottom: 1px solid var(--c-border); font-size: 12.5px; }
+.spec-tbl td:first-child { color: var(--c-text-2); font-weight: 500; }
+.spec-tbl td:last-child { font-weight: 700; }
+
+.notes-list { list-style: none; margin-top: 6px; }
+.notes-list li { font-size: 12px; color: var(--c-text-2); padding: 3px 0 3px 16px; position: relative; }
+.notes-list li::before { content: '–'; position: absolute; left: 0; color: var(--c-text-3); }
+
+.law-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.law-table td { padding: 6px 0; border-bottom: 1px solid var(--c-border); font-size: 12.5px; }
+.law-table tr:last-child td { border-bottom: none; }
+.law-table td:last-child { text-align: right; color: var(--c-text-2); font-size: 11px; }
+
+.warn-box {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 12px;
+  color: #92400e;
+  margin-top: 10px;
+}
+
+/* ─── EMPTY STATE ─── */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--c-text-3);
+}
+.empty-state .es-title { font-size: 15px; font-weight: 700; color: var(--c-text-2); margin-bottom: 6px; }
+.empty-state .es-sub { font-size: 13px; }
+
+/* ─── INFO BANNER ─── */
+.info-banner {
+  background: var(--c-accent-light);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #1e40af;
+  margin-bottom: 16px;
+}
+
+/* ─── DIVIDER ─── */
+.divider { border: none; border-top: 1px solid var(--c-border); margin: 20px 0; }
+
+/* ─── PRINT ─── */
+@media print {
+  .topbar, .proposal-actions { display: none !important; }
+  body { background: #fff; }
+  .wrapper { padding: 0; }
+  .proposal-doc { box-shadow: none; border: none; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="topbar-brand">Calculadora <span>Solar</span> RD</div>
+  <div class="tab-nav">
+    <button class="active" onclick="showPage('datos')">Datos</button>
+    <button onclick="showPage('calculo')">Calculo</button>
+    <button onclick="showPage('finanzas')">Finanzas</button>
+    <button onclick="showPage('graficos')">Graficos</button>
+    <button onclick="showPage('propuesta')">Propuesta</button>
+  </div>
+  <button class="btn-calc" onclick="calcular()">Calcular</button>
+</nav>
+
+<div class="wrapper">
+
+  <!-- ======================================================= DATOS -->
+  <div class="page active" id="page-datos">
+
+    <div class="info-banner">
+      Completa los campos en fondo amarillo. Los resultados se generan al presionar <strong>Calcular</strong>.
+    </div>
+
+    <div class="card">
+      <div class="card-title">A. Datos del cliente y proyecto</div>
+      <div class="g2">
+        <div class="field"><label>Nombre del cliente</label><input class="input-editable" id="d_cliente" placeholder="Ej. Juan Perez"/></div>
+        <div class="field"><label>NIC / Contrato energetico</label><input class="input-editable" id="d_nic" placeholder="Ej. 78995956"/></div>
+        <div class="field"><label>Nombre del proyecto</label><input class="input-editable" id="d_proyecto" placeholder="Ej. Residencia principal"/></div>
+        <div class="field"><label>Fecha de propuesta</label><input class="input-editable" type="date" id="d_fecha"/></div>
+        <div class="field"><label>Vigencia (dias)</label><input class="input-editable" id="d_vigencia" placeholder="Ej. 14" type="number"/></div>
+        <div class="field"><label>Correo electronico</label><input class="input-editable" id="d_email" placeholder="correo@ejemplo.com"/></div>
+        <div class="field"><label>Moneda de presentacion</label>
+          <select class="input-editable" id="d_moneda"><option>USD</option><option>RD$</option></select>
+        </div>
+        <div class="field"><label>Ubicacion / Direccion</label><input class="input-editable" id="d_dir" placeholder="Ej. Calle 1, Santiago"/></div>
+        <div class="field"><label>Tasa de cambio (RD$/USD)</label><input class="input-editable" id="d_tasa" placeholder="Ej. 60" type="number" step="0.01"/></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">B. Parametros del sistema solar</div>
+      <div class="g2">
+        <div class="field"><label>Ciudad</label>
+          <select class="input-editable" id="d_ciudad" onchange="autoHSP()">
+            <option value="">— Seleccionar —</option>
+            <option>Santiago</option><option>Santo Domingo</option><option>La Vega</option>
+            <option>San Francisco de Macoris</option><option>Bonao</option><option>Constanza</option>
+            <option>Jarabacoa</option><option>Sabaneta de Yasica</option><option>Salcedo</option>
+            <option>Nagua</option><option>Samana</option><option>Cotui</option><option>Moca</option>
+            <option>Hermanas Mirabal</option><option>Puerto Plata</option><option>Sabana Iglesia</option>
+            <option>Santiago Rodriguez</option><option>Montecristi</option><option>Mao</option>
+            <option>Dajabon</option><option>Villa Vasquez</option>
+          </select>
+        </div>
+        <div class="field"><label>Distribuidora</label>
+          <select class="input-editable" id="d_distrib">
+            <option value="">— Seleccionar —</option>
+            <option>EDENORTE</option><option>EDESUR</option><option>EDEESTE</option>
+          </select>
+        </div>
+        <div class="field"><label>Tipo de tarifa</label>
+          <select class="input-editable" id="d_tarifa">
+            <option value="">— Seleccionar —</option>
+            <option>BTS-1</option><option>BTS-2</option><option>BTD</option>
+            <option>BTH</option><option>MTD-1</option><option>MTD-2</option><option>MTH</option>
+          </select>
+        </div>
+        <div class="field"><label>Tipo de sistema</label>
+          <select class="input-editable" id="d_sistema">
+            <option value="">— Seleccionar —</option>
+            <option>On-Grid</option><option>Off-Grid</option><option>Hibrido</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Horas Solares Pico (HSP)</label>
+          <input class="input-editable" id="d_hsp" placeholder="Ej. 4.23" type="number" step="0.01"/>
+          <span class="hint">Se ajusta automaticamente segun la ciudad seleccionada</span>
+        </div>
+        <div class="field"><label>Potencia del panel (W)</label><input class="input-editable" id="d_panel_w" placeholder="Ej. 590" type="number"/></div>
+        <div class="field"><label>Factor sobredimensionamiento</label><input class="input-editable" id="d_fs" placeholder="Ej. 1.2" type="number" step="0.01"/>
+          <span class="hint">Tipicamente entre 1.15 y 1.25</span>
+        </div>
+        <div class="field"><label>Costo por Wp (USD)</label><input class="input-editable" id="d_costo_wp" placeholder="Ej. 0.95" type="number" step="0.01"/></div>
+        <div class="field"><label>Modo de diseno</label>
+          <select class="input-editable" id="d_modo" onchange="toggleManual()">
+            <option value="Automatica">Automatico</option><option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div class="field" id="campo_manual" style="display:none">
+          <label>Cantidad de paneles (modo manual)</label>
+          <input class="input-editable" id="d_paneles_manual" placeholder="Ej. 20" type="number"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="months-container">
+        <div class="months-header">
+          <div class="months-header-title">C. Consumo electrico mensual (kWh)</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="avg-selector">
+              <label>Promedio de ultimos</label>
+              <select id="avg_n">
+                <option value="3">3 meses</option>
+                <option value="4">4 meses</option>
+                <option value="5">5 meses</option>
+                <option value="6" selected>6 meses</option>
+                <option value="7">7 meses</option>
+                <option value="8">8 meses</option>
+                <option value="9">9 meses</option>
+                <option value="10">10 meses</option>
+                <option value="11">11 meses</option>
+                <option value="12">12 meses</option>
+              </select>
+            </div>
+            <button class="btn-apply-avg" onclick="applyAverage()">Aplicar promedio</button>
+          </div>
+        </div>
+
+        <div class="months-grid" id="months-grid"></div>
+
+        <div class="totals-strip">
+          <div class="total-item"><div class="tv" id="tot_anual">—</div><div class="tl">Consumo anual (kWh)</div></div>
+          <div class="total-item"><div class="tv" id="tot_mensual">—</div><div class="tl">Promedio mensual (kWh)</div></div>
+          <div class="total-item"><div class="tv" id="tot_diario">—</div><div class="tl">Promedio diario (kWh)</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-datos -->
+
+  <!-- ====================================================== CALCULO -->
+  <div class="page" id="page-calculo">
+
+    <div id="calculo-empty" class="card">
+      <div class="empty-state">
+        <div class="es-title">Sin resultados aun</div>
+        <div class="es-sub">Completa los datos y presiona <strong>Calcular</strong> para ver el dimensionamiento.</div>
+      </div>
+    </div>
+
+    <div id="calculo-content" style="display:none">
+      <div class="card">
+        <div class="card-title">Dimensionamiento del sistema</div>
+        <div class="g4">
+          <div class="stat-card accent"><div class="sv" id="r_kwp_req">—</div><div class="su">kWp</div><div class="sl">kWp requerido (sin sobredim.)</div></div>
+          <div class="stat-card accent"><div class="sv" id="r_kwp_adj">—</div><div class="su">kWp</div><div class="sl">kWp ajustado (con sobredim.)</div></div>
+          <div class="stat-card"><div class="sv" id="r_paneles">—</div><div class="su">paneles</div><div class="sl">Cantidad de paneles</div></div>
+          <div class="stat-card"><div class="sv" id="r_kwp_real">—</div><div class="su">kWp</div><div class="sl">Potencia real instalada</div></div>
+        </div>
+        <div class="g4" style="margin-top:12px">
+          <div class="stat-card"><div class="sv" id="r_gen_mensual">—</div><div class="su">kWh/mes</div><div class="sl">Generacion mensual base</div></div>
+          <div class="stat-card"><div class="sv" id="r_gen_anual">—</div><div class="su">kWh/ano</div><div class="sl">Generacion anual estimada</div></div>
+          <div class="stat-card"><div class="sv" id="r_inversores">—</div><div class="su">inversores 8 kW</div><div class="sl">Inversores requeridos</div></div>
+          <div class="stat-card green"><div class="sv" id="r_cobertura">—</div><div class="su">%</div><div class="sl">Cobertura del consumo</div></div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap">
+          <span style="background:var(--c-green-light);color:#065f46;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">CO2 evitado / ano: <span id="r_co2">—</span> toneladas</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Generacion mensual estimada — factores estacionales</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Mes</th>
+              <th class="tc">Factor estacional</th>
+              <th class="tr">Consumo (kWh)</th>
+              <th class="tr">Generacion (kWh)</th>
+              <th class="tr">Cobertura (%)</th>
+            </tr></thead>
+            <tbody id="tabla-mensual"></tbody>
+            <tfoot><tr>
+              <td>Totales</td><td>—</td>
+              <td class="tr" id="tf-consumo">—</td>
+              <td class="tr" id="tf-gen">—</td>
+              <td>—</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-calculo -->
+
+  <!-- ====================================================== FINANZAS -->
+  <div class="page" id="page-finanzas">
+
+    <div id="finanzas-empty" class="card">
+      <div class="empty-state">
+        <div class="es-title">Sin resultados aun</div>
+        <div class="es-sub">Completa los datos y presiona <strong>Calcular</strong> para ver el analisis financiero.</div>
+      </div>
+    </div>
+
+    <div id="finanzas-content" style="display:none">
+      <div class="g2">
+        <div class="card">
+          <div class="card-title">Inversion del sistema</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="field"><label>Costo estimado (USD)</label><input readonly id="f_costo_usd"/></div>
+            <div class="field"><label>ITBIS (0.18%)</label><input readonly id="f_itbis"/></div>
+            <div class="field"><label>Total general (USD)</label><input readonly id="f_total_usd" style="font-weight:800"/></div>
+            <div class="field"><label>Total general (RD$)</label><input readonly id="f_total_rdp"/></div>
+            <div class="field"><label>Precio real por Wp (USD)</label><input readonly id="f_precio_wp"/></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Analisis de ahorro economico</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="field"><label>Tarifa energia efectiva (RD$/kWh)</label><input readonly id="f_tarifa_efec"/></div>
+            <div class="field"><label>Generacion mensual (kWh)</label><input readonly id="f_gen_mensual"/></div>
+            <div class="field"><label>Ahorro mensual (RD$)</label><input readonly id="f_ahorro_mensual" style="font-weight:800"/></div>
+            <div class="field"><label>Ahorro anual (RD$)</label><input readonly id="f_ahorro_anual"/></div>
+            <div class="field"><label>Ahorro anual (USD)</label><input readonly id="f_ahorro_usd"/></div>
+            <div class="field"><label>Retorno de inversion (anos)</label><input readonly id="f_roi" style="font-weight:800"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Generacion y ahorro a 25 anos — degradacion 0.6% por ano</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th class="tc">Ano</th>
+              <th class="tr">Factor degr.</th>
+              <th class="tr">Generacion (kWh)</th>
+              <th class="tr">Ahorro (RD$)</th>
+              <th class="tr">Ahorro acumulado (RD$)</th>
+            </tr></thead>
+            <tbody id="tabla-25anos"></tbody>
+            <tfoot><tr>
+              <td>Total 25 anos</td><td>—</td>
+              <td class="tr" id="tf25-gen">—</td>
+              <td class="tr" id="tf25-ahorro">—</td>
+              <td class="tr" id="tf25-acum">—</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-finanzas -->
+
+  <!-- ====================================================== GRAFICOS -->
+  <div class="page" id="page-graficos">
+
+    <div id="graficos-empty" class="card">
+      <div class="empty-state">
+        <div class="es-title">Sin graficos aun</div>
+        <div class="es-sub">Presiona <strong>Calcular</strong> para generar los graficos.</div>
+      </div>
+    </div>
+
+    <div id="graficos-content" style="display:none">
+      <div class="card">
+        <div class="card-title">Generacion vs consumo mensual (kWh)</div>
+        <div class="chart-wrap-tall"><canvas id="chart-mensual"></canvas></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="card-title">Degradacion de generacion a 25 anos (kWh/ano)</div>
+          <div class="chart-wrap"><canvas id="chart-degradacion"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Ahorro acumulado a 25 anos (RD$)</div>
+          <div class="chart-wrap"><canvas id="chart-ahorro"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cobertura del consumo por mes (%)</div>
+        <div class="chart-wrap"><canvas id="chart-cobertura"></canvas></div>
+      </div>
+    </div>
+
+  </div><!-- /page-graficos -->
+
+  <!-- ====================================================== PROPUESTA -->
+  <div class="page" id="page-propuesta">
+
+    <div id="propuesta-empty" class="card">
+      <div class="empty-state">
+        <div class="es-title">Sin propuesta aun</div>
+        <div class="es-sub">Completa los datos y presiona <strong>Calcular</strong> para generar la propuesta.</div>
+      </div>
+    </div>
+
+    <div id="propuesta-content" style="display:none" class="proposal-shell">
+      <div class="proposal-actions">
+        <button class="btn-secondary" onclick="window.print()">Imprimir / PDF</button>
+      </div>
+      <div class="proposal-doc">
+
+        <div class="prop-topbar">
+          <div>
+            <div class="prop-company-name" id="p_empresa">— Empresa —</div>
+            <div class="prop-company-sub" id="p_empresa_sub">Sistema de Energia Solar Fotovoltaica</div>
+          </div>
+          <div class="prop-meta">
+            <div>Fecha: <strong id="p_fecha_prop">—</strong></div>
+            <div>Vigencia: <strong id="p_vigencia">—</strong> dias</div>
+            <div>Moneda: <strong id="p_moneda_prop">—</strong></div>
+          </div>
+        </div>
+
+        <div class="prop-client-header">
+          <div class="pch-sub">Propuesta energetica preparada para</div>
+          <div class="pch-name" id="p_nombre_cliente">—</div>
+          <div class="pch-meta">Distribuidora: <strong id="p_distrib">—</strong> &nbsp;·&nbsp; NIC: <strong id="p_nic">—</strong> &nbsp;·&nbsp; <strong id="p_ciudad_prop">—</strong></div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-box"><div class="kv" id="p_kwp">—</div><div class="kl">kWp instalados</div></div>
+          <div class="kpi-box"><div class="kv" id="p_gen_anual">—</div><div class="kl">Generacion anual (kWh)</div></div>
+          <div class="kpi-box"><div class="kv" id="p_roi">—</div><div class="kl">Retorno de inversion</div></div>
+        </div>
+
+        <div class="prop-section-label">Especificaciones del sistema</div>
+        <div class="spec-cols">
+          <table class="spec-tbl">
+            <tr><td>Paneles fotovoltaicos</td><td id="p_paneles">—</td></tr>
+            <tr><td>Inversores</td><td id="p_inversores">—</td></tr>
+            <tr><td>kWp instalados</td><td id="p_kwp2">—</td></tr>
+            <tr><td>Generacion mensual</td><td id="p_gen_mensual">—</td></tr>
+            <tr><td>Generacion anual</td><td id="p_gen_anual2">—</td></tr>
+          </table>
+          <table class="spec-tbl">
+            <tr><td>Inversion total (USD)</td><td id="p_inversion">—</td></tr>
+            <tr><td>Ahorro mensual (RD$)</td><td id="p_ahorro_mens">—</td></tr>
+            <tr><td>Ahorro anual (RD$)</td><td id="p_ahorro_anual">—</td></tr>
+            <tr><td>Retorno de inversion</td><td id="p_roi2">—</td></tr>
+            <tr><td>CO2 evitado / ano</td><td id="p_co2">—</td></tr>
+          </table>
+        </div>
+
+        <div class="prop-section-label">Garantias y soporte</div>
+        <div class="spec-cols">
+          <table class="spec-tbl">
+            <tr><td>Panel solar — garantia producto</td><td>10 anos</td></tr>
+            <tr><td>Panel solar — garantia rendimiento</td><td>30 anos</td></tr>
+            <tr><td>Inversor — garantia producto</td><td>5 anos</td></tr>
+          </table>
+          <table class="spec-tbl">
+            <tr><td>Inversor — garantia rendimiento</td><td>10 anos</td></tr>
+            <tr><td>Soporte tecnico</td><td>2 anos incluidos</td></tr>
+            <tr><td>Vida util del sistema</td><td>25+ anos</td></tr>
+          </table>
+        </div>
+
+        <div class="prop-section-label">Beneficios Ley 57-07</div>
+        <table class="law-table">
+          <tr><td>Exencion de impuestos de importacion</td><td>Cap. III – Art. 9</td></tr>
+          <tr><td>Exencion de impuesto sobre la renta</td><td>Cap. III – Art. 10</td></tr>
+          <tr><td>Reduccion de impuestos por financiamiento externo</td><td>Cap. III – Art. 11</td></tr>
+          <tr><td>Credito fiscal hasta 40% del costo de inversion</td><td>Cap. III – Art. 12</td></tr>
+        </table>
+        <div class="warn-box">El cliente debera pagar entre RD$7,800 – RD$12,000 anuales durante 3 anos por gastos de exoneracion (Ley 57-07).</div>
+
+        <div class="prop-section-label">Condiciones y notas</div>
+        <ul class="notes-list">
+          <li>Los pagos se realizaran en USD o DOP a la tasa de venta del dia.</li>
+          <li>Si el cliente no tiene contador bidireccional, debera cubrir su costo (USD 250 – USD 1,005).</li>
+          <li>Los sistemas On-Grid dejan de producir cuando se interrumpe el suministro electrico.</li>
+          <li>El calculo esta basado en el promedio de consumo anual. Margen de variacion 5%.</li>
+          <li>Equipos sujetos a disponibilidad; pueden reemplazarse por similares o superiores.</li>
+          <li>Esta cotizacion no incluye adicionales electricos.</li>
+        </ul>
+
+      </div>
+    </div>
+
+  </div><!-- /page-propuesta -->
+
+</div><!-- /wrapper -->
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────
+const HSP = {
+  'Santiago': 4.11, 'Santo Domingo': 4.00, 'La Vega': 3.97, 'San Francisco de Macoris': 3.97,
+  'Bonao': 3.97, 'Constanza': 3.97, 'Jarabacoa': 3.97, 'Sabaneta de Yasica': 3.97,
+  'Salcedo': 4.11, 'Nagua': 4.11, 'Samana': 4.11, 'Cotui': 4.11, 'Moca': 4.11,
+  'Hermanas Mirabal': 4.11, 'Puerto Plata': 4.11, 'Sabana Iglesia': 4.11,
+  'Santiago Rodriguez': 4.23, 'Montecristi': 4.23, 'Mao': 4.23, 'Dajabon': 4.23,
+  'Villa Vasquez': 4.23
+};
+const TARIFAS = {
+  'BTS-1':  { EDESUR: 13.09, EDENORTE: 14.04, EDEESTE: 13.26 },
+  'BTS-2':  { EDESUR: 13.43, EDENORTE: 14.38, EDEESTE: 13.59 },
+  'BTD':    { EDESUR:  9.02, EDENORTE:  9.83, EDEESTE:  9.07 },
+  'BTH':    { EDESUR:  8.92, EDENORTE:  9.74, EDEESTE:  8.98 },
+  'MTD-1':  { EDESUR:  9.13, EDENORTE:  9.89, EDEESTE:  9.19 },
+  'MTD-2':  { EDESUR:  8.75, EDENORTE:  9.52, EDEESTE:  8.81 },
+  'MTH':    { EDESUR:  8.64, EDENORTE:  9.42, EDEESTE:  8.70 }
+};
+const MESES   = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const FACTORES = [0.95, 1.00, 1.05, 1.08, 1.10, 1.12, 1.15, 1.12, 1.08, 1.05, 1.00, 0.95];
+
+// ─── CHARTS ────────────────────────────────────────────────────────────────
+let charts = {};
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+(function init() {
+  const grid = document.getElementById('months-grid');
+  MESES.forEach((m, i) => {
+    const div = document.createElement('div');
+    div.className = 'month-cell';
+    div.innerHTML = `<label>${m}</label><input id="cons_${i}" type="number" placeholder="kWh" min="0" oninput="updateConsTotals()">`;
+    grid.appendChild(div);
+  });
+})();
+
+// ─── HSP AUTO ───────────────────────────────────────────────────────────────
+function autoHSP() {
+  const city = document.getElementById('d_ciudad').value;
+  if (HSP[city]) document.getElementById('d_hsp').value = HSP[city];
+}
+
+function toggleManual() {
+  const m = document.getElementById('d_modo').value;
+  document.getElementById('campo_manual').style.display = m === 'Manual' ? 'block' : 'none';
+}
+
+// ─── AVERAGE ────────────────────────────────────────────────────────────────
+function applyAverage() {
+  const n = parseInt(document.getElementById('avg_n').value);
+  // Read last n months that have a value
+  const filled = [];
+  for (let i = 11; i >= 0 && filled.length < n; i--) {
+    const v = parseFloat(document.getElementById(`cons_${i}`).value);
+    if (!isNaN(v) && v > 0) filled.push(v);
+  }
+  if (filled.length === 0) { alert('Ingresa al menos un valor de consumo primero.'); return; }
+  const avg = Math.round(filled.reduce((a,b) => a+b, 0) / filled.length);
+  MESES.forEach((_, i) => { document.getElementById(`cons_${i}`).value = avg; });
+  updateConsTotals();
+}
+
+// ─── CONSUMPTION TOTALS ─────────────────────────────────────────────────────
+function updateConsTotals() {
+  const vals = MESES.map((_, i) => parseFloat(document.getElementById(`cons_${i}`)?.value) || 0);
+  const total = vals.reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    set('tot_anual','—'); set('tot_mensual','—'); set('tot_diario','—');
+  } else {
+    set('tot_anual', fmt(Math.round(total)));
+    set('tot_mensual', fmt(Math.round(total / 12)));
+    set('tot_diario', fmtDec(total / 365, 1));
+  }
+}
+
+// ─── NAV ────────────────────────────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelectorAll('.tab-nav button').forEach((b, i) => {
+    b.classList.toggle('active', ['datos','calculo','finanzas','graficos','propuesta'][i] === id);
+  });
+}
+
+// ─── VALIDATE ───────────────────────────────────────────────────────────────
+function validate() {
+  const req = [
+    ['d_hsp','HSP'], ['d_panel_w','Potencia del panel'], ['d_fs','Factor de sobredimensionamiento'],
+    ['d_costo_wp','Costo por Wp'], ['d_tasa','Tasa de cambio'], ['d_distrib','Distribuidora'], ['d_tarifa','Tipo de tarifa']
+  ];
+  for (const [id, label] of req) {
+    const v = document.getElementById(id)?.value;
+    if (!v || v === '') { alert(`El campo "${label}" es requerido para calcular.`); return false; }
+  }
+  const consumos = MESES.map((_, i) => parseFloat(document.getElementById(`cons_${i}`)?.value) || 0);
+  if (consumos.every(v => v === 0)) { alert('Ingresa al menos un mes de consumo electrico.'); return false; }
+  return true;
+}
+
+// ─── MAIN CALC ───────────────────────────────────────────────────────────────
+function calcular() {
+  if (!validate()) return;
+
+  const consumos   = MESES.map((_, i) => parseFloat(document.getElementById(`cons_${i}`)?.value) || 0);
+  const totalAnual = consumos.reduce((a, b) => a + b, 0);
+  const promMensual = totalAnual / 12;
+
+  const hsp     = parseFloat(document.getElementById('d_hsp').value);
+  const fs      = parseFloat(document.getElementById('d_fs').value);
+  const panelW  = parseFloat(document.getElementById('d_panel_w').value);
+  const costoWp = parseFloat(document.getElementById('d_costo_wp').value);
+  const tasa    = parseFloat(document.getElementById('d_tasa').value);
+  const modo    = document.getElementById('d_modo').value;
+  const distrib = document.getElementById('d_distrib').value;
+  const tarifa  = document.getElementById('d_tarifa').value;
+
+  // Dimensionamiento
+  const kwpReq = (promMensual / 30) / hsp;
+  const kwpAdj = kwpReq * fs;
+  let paneles  = modo === 'Manual'
+    ? (parseInt(document.getElementById('d_paneles_manual').value) || Math.ceil(kwpAdj * 1000 / panelW))
+    : Math.ceil(kwpAdj * 1000 / panelW);
+  const kwpReal       = paneles * panelW / 1000;
+  const genMensualBase = kwpReal * hsp * 30;
+  const genAnual       = genMensualBase * 12;
+  const inversores     = Math.ceil(kwpReal / 8);
+  const cobertura      = (genAnual / totalAnual) * 100;
+  const co2            = genAnual * 0.0005;
+
+  const genMensual = FACTORES.map(f => kwpReal * hsp * 30 * f);
+  const cobMensual = consumos.map((c, i) => c > 0 ? (genMensual[i] / c) * 100 : 0);
+
+  // Finanzas
+  const costUSD  = kwpReal * 1000 * costoWp;
+  const itbis    = costUSD * 0.0018;
+  const totalUSD = costUSD + itbis;
+  const totalRDP = totalUSD * tasa;
+  const precioWp = totalUSD / (kwpReal * 1000);
+  const tarifaEfec  = TARIFAS[tarifa]?.[distrib] || 0;
+  const ahorroMens  = genMensualBase * tarifaEfec;
+  const ahorroAnual = ahorroMens * 12;
+  const ahorroUSD   = ahorroAnual / tasa;
+  const roi         = totalUSD / ahorroUSD;
+
+  // 25-year projections
+  const genData25 = [], ahorroData25 = [], ahorroAcum25 = [];
+  let acum = 0, tot25gen = 0, tot25ahorro = 0;
+  for (let y = 1; y <= 25; y++) {
+    const degr = Math.pow(1 - 0.006, y - 1);
+    const gen  = genAnual * degr;
+    const sav  = ahorroAnual * degr;
+    acum += sav;
+    tot25gen += gen; tot25ahorro += sav;
+    genData25.push(Math.round(gen));
+    ahorroData25.push(Math.round(sav));
+    ahorroAcum25.push(Math.round(acum));
+  }
+
+  // ── Calculo tab ─────────────────────────────────────────────────────────
+  show('calculo-empty', false); show('calculo-content', true);
+  set('r_kwp_req',     fmtDec(kwpReq, 3));
+  set('r_kwp_adj',     fmtDec(kwpAdj, 3));
+  set('r_paneles',     paneles);
+  set('r_kwp_real',    fmtDec(kwpReal, 2));
+  set('r_gen_mensual', fmt(Math.round(genMensualBase)));
+  set('r_gen_anual',   fmt(Math.round(genAnual)));
+  set('r_inversores',  inversores);
+  set('r_cobertura',   fmtDec(cobertura, 1));
+  set('r_co2',         fmtDec(co2, 2));
+
+  let tbody = '', sumCons = 0, sumGen = 0;
+  MESES.forEach((m, i) => {
+    const c = cobMensual[i];
+    const colStyle = c >= 100 ? 'color:#059669;font-weight:700' : 'color:#b45309;font-weight:700';
+    tbody += `<tr><td>${m}</td><td class="tc">${FACTORES[i].toFixed(2)}</td><td class="tr">${fmt(Math.round(consumos[i]))}</td><td class="tr">${fmt(Math.round(genMensual[i]))}</td><td class="tr" style="${colStyle}">${fmtDec(c,1)}%</td></tr>`;
+    sumCons += consumos[i]; sumGen += genMensual[i];
+  });
+  document.getElementById('tabla-mensual').innerHTML = tbody;
+  set('tf-consumo', fmt(Math.round(sumCons)));
+  set('tf-gen',     fmt(Math.round(sumGen)));
+
+  // ── Finanzas tab ────────────────────────────────────────────────────────
+  show('finanzas-empty', false); show('finanzas-content', true);
+  setV('f_costo_usd',      '$ ' + fmtDec(costUSD, 2));
+  setV('f_itbis',          '$ ' + fmtDec(itbis, 2));
+  setV('f_total_usd',      '$ ' + fmtDec(totalUSD, 2));
+  setV('f_total_rdp',      'RD$ ' + fmt(Math.round(totalRDP)));
+  setV('f_precio_wp',      '$ ' + fmtDec(precioWp, 3));
+  setV('f_tarifa_efec',    'RD$ ' + fmtDec(tarifaEfec, 2));
+  setV('f_gen_mensual',    fmt(Math.round(genMensualBase)));
+  setV('f_ahorro_mensual', 'RD$ ' + fmt(Math.round(ahorroMens)));
+  setV('f_ahorro_anual',   'RD$ ' + fmt(Math.round(ahorroAnual)));
+  setV('f_ahorro_usd',     '$ ' + fmtDec(ahorroUSD, 0));
+  setV('f_roi',            fmtDec(roi, 1) + ' anos');
+
+  let tbody25 = '';
+  for (let y = 1; y <= 25; y++) {
+    const degr = Math.pow(1 - 0.006, y - 1);
+    tbody25 += `<tr><td class="tc">${y}</td><td class="tr">${fmtDec(degr,3)}</td><td class="tr">${fmt(genData25[y-1])}</td><td class="tr">RD$ ${fmt(ahorroData25[y-1])}</td><td class="tr">RD$ ${fmt(ahorroAcum25[y-1])}</td></tr>`;
+  }
+  document.getElementById('tabla-25anos').innerHTML = tbody25;
+  set('tf25-gen',    fmt(Math.round(tot25gen)));
+  set('tf25-ahorro', 'RD$ ' + fmt(Math.round(tot25ahorro)));
+  set('tf25-acum',   'RD$ ' + fmt(Math.round(acum)));
+
+  // ── Propuesta tab ────────────────────────────────────────────────────────
+  show('propuesta-empty', false); show('propuesta-content', true);
+  const clienteName = document.getElementById('d_cliente').value || '—';
+  set('p_nombre_cliente', clienteName);
+  set('p_empresa', document.getElementById('d_proyecto').value || 'Propuesta Solar');
+  set('p_distrib',       distrib);
+  set('p_nic',           document.getElementById('d_nic').value || '—');
+  set('p_ciudad_prop',   document.getElementById('d_ciudad').value || '—');
+  set('p_fecha_prop',    document.getElementById('d_fecha').value || '—');
+  set('p_vigencia',      document.getElementById('d_vigencia').value || '—');
+  set('p_moneda_prop',   document.getElementById('d_moneda').value);
+  set('p_kwp',           fmtDec(kwpReal, 3) + ' kWp');
+  set('p_gen_anual',     fmt(Math.round(genAnual)) + ' kWh');
+  set('p_roi',           fmtDec(roi, 1) + ' Anos');
+  set('p_paneles',       `${paneles} modulos de ${panelW}W`);
+  set('p_inversores',    `${inversores} inversores de 8 kW`);
+  set('p_kwp2',          fmtDec(kwpReal, 2) + ' kWp');
+  set('p_gen_mensual',   fmt(Math.round(genMensualBase)) + ' kWh/mes');
+  set('p_gen_anual2',    fmt(Math.round(genAnual)) + ' kWh/ano');
+  set('p_inversion',     '$ ' + fmtDec(totalUSD, 2));
+  set('p_ahorro_mens',   'RD$ ' + fmt(Math.round(ahorroMens)));
+  set('p_ahorro_anual',  'RD$ ' + fmt(Math.round(ahorroAnual)));
+  set('p_roi2',          fmtDec(roi, 1) + ' anos');
+  set('p_co2',           fmtDec(co2, 2) + ' toneladas');
+
+  // ── Charts ───────────────────────────────────────────────────────────────
+  show('graficos-empty', false); show('graficos-content', true);
+  drawCharts(consumos, genMensual, cobMensual, genData25, ahorroAcum25);
+
+  updateConsTotals();
+}
+
+// ─── CHARTS ─────────────────────────────────────────────────────────────────
+function drawCharts(consumos, genMensual, cobMensual, genData25, ahorroAcum25) {
+  const y25 = Array.from({length:25}, (_,i) => 'Ano '+(i+1));
+  const destroyAndCreate = (id, config) => {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(document.getElementById(id), config);
+  };
+
+  destroyAndCreate('chart-mensual', {
+    type: 'bar',
+    data: {
+      labels: MESES,
+      datasets: [
+        { label: 'Consumo (kWh)', data: consumos.map(Math.round), backgroundColor: 'rgba(37,99,235,.55)', borderRadius: 4, order: 1 },
+        { label: 'Generacion (kWh)', data: genMensual.map(Math.round), backgroundColor: 'rgba(217,119,6,.75)', borderRadius: 4, order: 2 }
+      ]
+    },
+    options: baseOpts({ responsive: true, maintainAspectRatio: false })
+  });
+
+  destroyAndCreate('chart-degradacion', {
+    type: 'line',
+    data: {
+      labels: y25,
+      datasets: [{ label: 'Generacion (kWh)', data: genData25, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.1)', fill: true, tension: 0.3, pointRadius: 2 }]
+    },
+    options: baseOpts({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } })
+  });
+
+  destroyAndCreate('chart-ahorro', {
+    type: 'line',
+    data: {
+      labels: y25,
+      datasets: [{ label: 'Ahorro acumulado (RD$)', data: ahorroAcum25, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,.1)', fill: true, tension: 0.3, pointRadius: 2 }]
+    },
+    options: baseOpts({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } })
+  });
+
+  destroyAndCreate('chart-cobertura', {
+    type: 'bar',
+    data: {
+      labels: MESES,
+      datasets: [{ label: 'Cobertura (%)', data: cobMensual.map(c => parseFloat(c.toFixed(1))),
+        backgroundColor: cobMensual.map(c => c >= 100 ? 'rgba(5,150,105,.7)' : 'rgba(217,119,6,.7)'),
+        borderRadius: 4 }]
+    },
+    options: baseOpts({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw + ' %' } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } } })
+  });
+}
+
+function baseOpts(extra) {
+  return {
+    ...extra,
+    plugins: { ...(extra.plugins || {}), legend: { ...(extra.plugins?.legend || {}), labels: { font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', size: 12 } } } },
+    scales: { ...(extra.scales || {}), x: { ticks: { font: { size: 11 } } }, y: { ...(extra.scales?.y || {}), ticks: { ...(extra.scales?.y?.ticks || {}), font: { size: 11 } } } }
+  };
+}
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+function fmt(n)          { return Number(n).toLocaleString('es-DO'); }
+function fmtDec(n, d)    { return parseFloat(n).toFixed(d); }
+function set(id, val)    { const e = document.getElementById(id); if (e) e.textContent = val; }
+function setV(id, val)   { const e = document.getElementById(id); if (e) e.value = val; }
+function show(id, v)     { const e = document.getElementById(id); if (e) e.style.display = v ? 'block' : 'none'; }
+</script>
+</body>
+</html>
