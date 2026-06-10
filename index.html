@@ -981,8 +981,7 @@ function calcular() {
   const kwpReal       = paneles * panelW / 1000;
   const genMensualBase = kwpReal * hsp * 30;
   const genAnual       = genMensualBase * 12;
-  // Inverters tolerate up to 20% DC oversize, so each 8kW inverter covers 8 * 1.2 = 9.6 kWp
-  const inversores     = Math.ceil(kwpReal / (8 * 1.2));
+  const { count: inversores, size: inversorKw } = getInverterConfig(kwpReal);
   const cobertura      = (genAnual / totalAnual) * 100;
   const co2            = genAnual * 0.0005;
 
@@ -1024,6 +1023,7 @@ function calcular() {
   set('r_gen_mensual', fmt(Math.round(genMensualBase)));
   set('r_gen_anual',   fmt(Math.round(genAnual)));
   set('r_inversores',  inversores);
+  document.querySelector('#r_inversores ~ .su').textContent = `inversor${inversores > 1 ? 'es' : ''} de ${inversorKw} kW`;
   set('r_cobertura',   fmtDec(cobertura, 1));
   set('r_co2',         fmtDec(co2, 2));
 
@@ -1077,7 +1077,7 @@ function calcular() {
   set('p_gen_anual',     fmt(Math.round(genAnual)) + ' kWh');
   set('p_roi',           fmtDec(roi, 1) + ' Anos');
   set('p_paneles',       `${paneles} modulos de ${panelW}W`);
-  set('p_inversores',    `${inversores} inversores de 8 kW`);
+  set('p_inversores',    `${inversores} ${inversores > 1 ? 'inversores' : 'inversor'} de ${inversorKw} kW`);
   set('p_kwp2',          fmtDec(kwpReal, 2) + ' kWp');
   set('p_gen_mensual',   fmt(Math.round(genMensualBase)) + ' kWh/mes');
   set('p_gen_anual2',    fmt(Math.round(genAnual)) + ' kWh/ano');
@@ -1153,6 +1153,19 @@ function baseOpts(extra) {
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
+// Returns the optimal inverter config: minimum count using standard sizes with 20% DC tolerance
+function getInverterConfig(kwpReal) {
+  const sizes = [1.5, 2, 3, 3.6, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30];
+  const acNeeded = kwpReal / 1.2;
+  for (let count = 1; count <= 10; count++) {
+    const sizeNeeded = acNeeded / count;
+    for (const size of sizes) {
+      if (size >= sizeNeeded) return { count, size };
+    }
+  }
+  return { count: Math.ceil(kwpReal / (8 * 1.2)), size: 8 };
+}
+
 function fmt(n)          { return Number(n).toLocaleString('es-DO'); }
 function fmtDec(n, d)    { return parseFloat(n).toFixed(d); }
 function set(id, val)    { const e = document.getElementById(id); if (e) e.textContent = val; }
