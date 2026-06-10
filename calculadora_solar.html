@@ -582,6 +582,10 @@ tfoot td { padding: 10px 14px; font-weight: 700; background: #f1f5f9; border-top
           <div class="total-item"><div class="tv" id="tot_anual">—</div><div class="tl">Consumo anual (kWh)</div></div>
           <div class="total-item"><div class="tv" id="tot_mensual">—</div><div class="tl">Promedio mensual (kWh)</div></div>
           <div class="total-item"><div class="tv" id="tot_diario">—</div><div class="tl">Promedio diario (kWh)</div></div>
+          <div class="total-item avg-ref-box" id="avg_ref_box" style="display:none;background:#eff6ff;border-left:3px solid #2563eb">
+            <div class="tv" style="color:#2563eb" id="avg_reference">—</div>
+            <div class="tl">Promedio ref. <span id="avg_ref_label"></span> (kWh/mes)</div>
+          </div>
         </div>
       </div>
     </div>
@@ -884,7 +888,6 @@ function toggleManual() {
 // ─── AVERAGE ────────────────────────────────────────────────────────────────
 function applyAverage() {
   const n = parseInt(document.getElementById('avg_n').value);
-  // Read last n months that have a value
   const filled = [];
   for (let i = 11; i >= 0 && filled.length < n; i--) {
     const v = parseFloat(document.getElementById(`cons_${i}`).value);
@@ -892,8 +895,10 @@ function applyAverage() {
   }
   if (filled.length === 0) { alert('Ingresa al menos un valor de consumo primero.'); return; }
   const avg = Math.round(filled.reduce((a,b) => a+b, 0) / filled.length);
-  MESES.forEach((_, i) => { document.getElementById(`cons_${i}`).value = avg; });
-  updateConsTotals();
+  // Show reference only — never overwrite the month inputs
+  document.getElementById('avg_ref_box').style.display = '';
+  set('avg_reference', fmt(avg));
+  set('avg_ref_label', `ultimos ${filled.length} meses`);
 }
 
 // ─── CONSUMPTION TOTALS ─────────────────────────────────────────────────────
@@ -959,7 +964,8 @@ function calcular() {
   const kwpReal       = paneles * panelW / 1000;
   const genMensualBase = kwpReal * hsp * 30;
   const genAnual       = genMensualBase * 12;
-  const inversores     = Math.ceil(kwpReal / 8);
+  // Inverters tolerate up to 20% DC oversize, so each 8kW inverter covers 8 * 1.2 = 9.6 kWp
+  const inversores     = Math.ceil(kwpReal / (8 * 1.2));
   const cobertura      = (genAnual / totalAnual) * 100;
   const co2            = genAnual * 0.0005;
 
