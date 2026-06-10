@@ -131,6 +131,32 @@ body {
   margin-bottom: 18px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.btn-dl-chart {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--c-bg);
+  border: 1.5px solid var(--c-border);
+  color: var(--c-text-2);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.btn-dl-chart:hover {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #fff;
 }
 
 /* ─── GRID ─── */
@@ -719,21 +745,33 @@ tfoot td { padding: 10px 14px; font-weight: 700; background: #f1f5f9; border-top
 
     <div id="graficos-content" style="display:none">
       <div class="card">
-        <div class="card-title">Generacion vs consumo mensual (kWh)</div>
+        <div class="card-title">
+          <span>Generacion vs consumo mensual (kWh)</span>
+          <button class="btn-dl-chart" onclick="downloadChart('chart-mensual','generacion-vs-consumo')">Descargar PNG</button>
+        </div>
         <div class="chart-wrap-tall"><canvas id="chart-mensual"></canvas></div>
       </div>
       <div class="g2">
         <div class="card">
-          <div class="card-title">Degradacion de generacion a 25 anos (kWh/ano)</div>
+          <div class="card-title">
+            <span>Degradacion de generacion a 25 anos</span>
+            <button class="btn-dl-chart" onclick="downloadChart('chart-degradacion','degradacion-25-anos')">Descargar PNG</button>
+          </div>
           <div class="chart-wrap"><canvas id="chart-degradacion"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">Ahorro acumulado a 25 anos (RD$)</div>
+          <div class="card-title">
+            <span>Ahorro acumulado a 25 anos (RD$)</span>
+            <button class="btn-dl-chart" onclick="downloadChart('chart-ahorro','ahorro-acumulado-25-anos')">Descargar PNG</button>
+          </div>
           <div class="chart-wrap"><canvas id="chart-ahorro"></canvas></div>
         </div>
       </div>
       <div class="card">
-        <div class="card-title">Cobertura del consumo por mes (%)</div>
+        <div class="card-title">
+          <span>Cobertura del consumo por mes (%)</span>
+          <button class="btn-dl-chart" onclick="downloadChart('chart-cobertura','cobertura-mensual')">Descargar PNG</button>
+        </div>
         <div class="chart-wrap"><canvas id="chart-cobertura"></canvas></div>
       </div>
     </div>
@@ -1142,6 +1180,23 @@ function fmtDec(n, d)    { return parseFloat(n).toFixed(d); }
 function set(id, val)    { const e = document.getElementById(id); if (e) e.textContent = val; }
 function setV(id, val)   { const e = document.getElementById(id); if (e) e.value = val; }
 function show(id, v)     { const e = document.getElementById(id); if (e) e.style.display = v ? 'block' : 'none'; }
+
+function downloadChart(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  // Render on white background
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = canvas.width;
+  offscreen.height = canvas.height;
+  const ctx = offscreen.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+  ctx.drawImage(canvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = filename + '.png';
+  link.href = offscreen.toDataURL('image/png');
+  link.click();
+}
 </script>
 </body>
 </html>
