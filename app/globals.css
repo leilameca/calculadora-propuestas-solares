@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --brand-primary: 15 76 92;
+  --brand-secondary: 47 125 50;
+  --brand-accent: 242 169 0;
+}
+
+* { border-color: hsl(var(--border)); }
+body { color: hsl(var(--foreground)); background: hsl(var(--background)); }
+
+@layer components {
+  .surface { @apply rounded-xl border bg-white shadow-panel; }
+  .label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .field { @apply h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15; }
+  .metric { @apply surface p-4; }
+  .metric-label { @apply mt-1 text-xs font-medium text-slate-500; }
+  .metric-value { @apply text-2xl font-bold tracking-tight text-slate-950; }
+}

@@ -1,0 +1,2 @@
+import { CompanyProfileForm } from "@/components/company-profile-form";
+export default function CompanyPage(){return <div className="mx-auto max-w-6xl space-y-6"><div><p className="text-sm font-medium text-primary">Configuración del tenant</p><h1 className="text-3xl font-black tracking-tight">Perfil de empresa</h1><p className="mt-1 text-sm text-slate-500">Estos datos y colores se aplican al dashboard y a cada propuesta Word.</p></div><CompanyProfileForm/></div>}
