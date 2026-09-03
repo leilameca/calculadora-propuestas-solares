@@ -1,14 +1,15 @@
 Actúa como Desarrollador Full-Stack Senior y Arquitecto de Software. Vamos a transformar y escalar una calculadora solar en HTML/JS a un SaaS completo en Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI y PostgreSQL con Prisma ORM.
 
 ==================================================
-1. REGLAS TÉCNICAS Y RESTRICCIONES STRICTAS
+1. REGLAS TÉCNICAS Y RESTRICCIONES ESTRICTAS
 ==================================================
 - NO USAR SUPABASE. Configurar PostgreSQL nativo vía Prisma ORM (para Railway, Render o VPS).
 - PROHIBIDO EL USO DE EMOJIS en toda la interfaz. Usar exclusivamente `lucide-react`.
 - CONSERVAR INTACTAS LAS FÓRMULAS Y PARÁMETROS SOLARES EXISTENTES:
   * HSP por provincia de República Dominicana.
   * Tarifas eléctricas vigentes (EDENORTE, EDESUR, EDEESTE en BTS-1, BTS-2, BTD, BTH, MTD, etc.).
-  * Factores de estacionalidad, degradación a 25 años (0.6% anual), ROI, ITBIS (18%) y CO2 evitado.
+  * Factores de estacionalidad, degradación a 25 años (0.6% anual), ROI, ITBIS comercial predeterminado (18%) y CO2 evitado.
+  * El ITBIS debe poder activarse, desactivarse o configurarse por empresa; la misma regla debe aplicarse en UI, persistencia y Word.
 
 ==================================================
 2. MULTI-TENANT, AUTH Y PERFIL DE EMPRESA
@@ -44,7 +45,9 @@ Implementar `/lib/docx-builder.ts` usando la librería `docx` para exportar la p
 
 - REGLAS DE DISEÑO:
   * Encabezados, bordes superiores y cajas de notas usando el Color Primario de la empresa.
+  * Aplicar también Color Secundario y Acento en métricas, divisores y elementos destacados, manteniendo contraste legible.
   * Tablas estilizadas con padding interno (mínimo 8pt) y anchos explícitos en %. Montos alineados a la DERECHA.
+  * Márgenes uniformes de 2.5 cm, tipografía Arial/Aptos y encabezado/pie permanente con logo, contacto, RNC, vigencia y número de página.
   * Saltos de página explícitos (`PageBreak`) entre secciones para evitar desbordamientos.
 - ESTRUCTURA DE PÁGINAS:
   * Pág 1 (Portada): Logo, foto aérea superior, título "PROPUESTA ENERGÉTICA", bloque "PREPARADO PARA" (Cliente, Sistema kWp, Ubicación, NIC, Fecha) y badges de KWh/Año y Vida útil.
@@ -62,6 +65,16 @@ Implementar `/lib/docx-builder.ts` usando la librería `docx` para exportar la p
 1. Definir `schema.prisma` (`Company`, `User`, `Customer`, `EquipmentInventory`, `Proposal`).
 2. Migrar la lógica matemática del `index.html` a `/lib/solar-calculator.ts`.
 3. Crear las rutas del App Router para Dashboard, Carga de Factura y Generador de Word.
+
+==================================================
+7. CRITERIOS DE ACEPTACIÓN
+==================================================
+- `npm test`, `npm run typecheck`, `npm run build` y `npx prisma validate` deben finalizar sin errores.
+- El cálculo de ejemplo debe demostrar ITBIS al 18%, ITBIS desactivado y tasa personalizada.
+- Una prueba OCR debe demostrar que “TITULAR DE PAGO” nunca reemplaza “NOMBRE O RAZON SOCIAL”.
+- Una factura EDENORTE con 13 meses debe producir exactamente los 12 meses recientes; EDESUR/EDEESTE deben activar entrada manual.
+- El `.docx` debe contener siete saltos explícitos, ocho páginas lógicas, encabezado/pie y tablas con geometría fija.
+- La propuesta debe usar el inversor seleccionado o escrito por el usuario; nunca uno calculado automáticamente.
 
 ==================================================
 ACTUALIZACIÓN ESTRICTA: PARSER OCR FACTURA EDENORTE

@@ -6,3 +6,4 @@ coverage/
 qa-docx/
 *.log
 *.tsbuildinfo
+.neon

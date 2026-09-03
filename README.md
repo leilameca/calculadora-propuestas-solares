@@ -28,4 +28,4 @@ En desarrollo el dashboard puede abrirse sin sesión. Defina `ALLOW_DEV_DASHBOAR
 - `npm run build`: compilación de producción.
 - `npx tsx scripts/generate-sample-docx.ts`: genera una propuesta de control en `qa-docx/`.
 
-El factor ITBIS se conserva en `0.0018` (0.18%) porque es el valor utilizado por el prototipo recibido. Si la regla comercial debe ser 18%, cambie `LEGACY_ITBIS_RATE` con aprobación funcional y añada una prueba de regresión.
+El ITBIS comercial predeterminado es 18%. Cada empresa puede desactivarlo o definir una tasa propia; el cálculo, la persistencia y la exportación Word reciben la misma configuración.
