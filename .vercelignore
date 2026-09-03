@@ -1,0 +1,10 @@
+.tmp
+artifacts
+qa-docx
+*.docx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.msi
+*.exe
