@@ -44,6 +44,8 @@ model Company {
   website             String?
   slogan              String?
   logoUrl              String?
+  coverImageUrl        String?
+  backCoverImageUrl    String?
   primaryColor        String               @default("#0F4C5C")
   secondaryColor      String               @default("#2F7D32")
   accentColor         String               @default("#F2A900")

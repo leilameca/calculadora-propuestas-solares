@@ -11,6 +11,8 @@ node_modules/
 coverage/
 qa-docx/
 .tmp/
+tmp/
+output/
 *.log
 *.tsbuildinfo
 .neon
