@@ -27,10 +27,15 @@ export async function POST(request: NextRequest) {
   try {
     const proposal = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const company = await tx.company.findUnique({ where: { id: session.companyId! }, select: { proposalValidityDays: true } });
-      // Buscar o crear el cliente por NIC dentro del tenant
-      let customer = body.customerNic
+      let customer = body.customerId
+        ? await tx.customer.findFirst({ where: { id: String(body.customerId), companyId: session.companyId! } })
+        : body.customerNic
         ? await tx.customer.findUnique({ where: { companyId_nic: { companyId: session.companyId!, nic: String(body.customerNic) } } })
         : null;
+
+      if (body.customerId && !customer) {
+        throw new Error("El cliente seleccionado no pertenece a esta empresa.");
+      }
 
       if (!customer) {
         customer = await tx.customer.create({
