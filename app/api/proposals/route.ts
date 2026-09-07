@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     await prisma.proposal.findMany({
       where: { companyId: session.companyId },
+      omit: { invoiceData: true },
       include: { customer: true, createdBy: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     })
@@ -57,6 +58,8 @@ export async function POST(request: NextRequest) {
             city: body.city ? String(body.city).trim() : null,
             utility: body.utility ? String(body.utility).trim() : null,
             tariff: body.tariff ? String(body.tariff).trim() : null,
+            logoUrl:body.customerLogo||null,
+            projectImageUrl:body.customerProjectImage||null,
           },
         });
       }
@@ -90,6 +93,10 @@ export async function POST(request: NextRequest) {
           totalUsd: body.totalUsd ?? 0,
           validUntil: body.validUntil ? new Date(body.validUntil) : new Date(Date.now() + (company?.proposalValidityDays || 15) * 24 * 60 * 60 * 1000),
           notes: body.notes || null,
+          projectImageUrl:body.projectImageUrl||null,
+          invoiceName:body.invoiceName||null,
+          invoiceMimeType:body.invoiceMimeType||null,
+          invoiceData:body.invoiceData||null,
         },
       });
     });
@@ -124,6 +131,8 @@ export async function PATCH(request: NextRequest) {
             city: body.city == null ? undefined : String(body.city),
             utility: body.utility == null ? undefined : String(body.utility),
             tariff: body.tariff == null ? undefined : String(body.tariff),
+            logoUrl:body.customerLogo===undefined?undefined:body.customerLogo||null,
+            projectImageUrl:body.customerProjectImage===undefined?undefined:body.customerProjectImage||null,
           },
         });
       }
@@ -146,6 +155,10 @@ export async function PATCH(request: NextRequest) {
         totalUsd: body.totalUsd == null ? undefined : body.totalUsd,
         validUntil: body.validUntil ? new Date(body.validUntil) : undefined,
         notes: body.notes == null ? undefined : String(body.notes).trim() || null,
+        projectImageUrl:body.projectImageUrl===undefined?undefined:body.projectImageUrl||null,
+        invoiceName:body.invoiceName===undefined?undefined:body.invoiceName||null,
+        invoiceMimeType:body.invoiceMimeType===undefined?undefined:body.invoiceMimeType||null,
+        invoiceData:body.invoiceData===undefined?undefined:body.invoiceData||null,
       }, include: { customer: true, createdBy: { select: { name: true } } } });
     });
     return NextResponse.json(proposal);

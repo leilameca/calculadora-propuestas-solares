@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Search, Users } from "lucide-react";
+import { ImagePlus, Loader2, Pencil, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { imageToDataUrl } from "@/lib/client-images";
 
 type Customer = {
   id: string;
@@ -16,13 +17,15 @@ type Customer = {
   city?: string | null;
   utility?: string | null;
   tariff?: string | null;
+  logoUrl?: string | null;
+  projectImageUrl?: string | null;
   createdAt: string;
   _count: { proposals: number };
 };
 
 type Company = { id: string; name: string; active: boolean };
 
-const emptyForm = { name: "", nic: "", rnc: "", email: "", phone: "", address: "", city: "", utility: "EDENORTE", tariff: "BTS-1" };
+const emptyForm = { name: "", nic: "", rnc: "", email: "", phone: "", address: "", city: "", utility: "EDENORTE", tariff: "BTS-1", logoUrl:"", projectImageUrl:"" };
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -81,7 +84,7 @@ export default function CustomersPage() {
 
   function edit(customer: Customer) {
     setEditingId(customer.id);
-    setForm({ name: customer.name, nic: customer.nic || "", rnc: customer.rnc || "", email: customer.email || "", phone: customer.phone || "", address: customer.address || "", city: customer.city || "", utility: customer.utility || "EDENORTE", tariff: customer.tariff || "BTS-1" });
+    setForm({ name: customer.name, nic: customer.nic || "", rnc: customer.rnc || "", email: customer.email || "", phone: customer.phone || "", address: customer.address || "", city: customer.city || "", utility: customer.utility || "EDENORTE", tariff: customer.tariff || "BTS-1",logoUrl:customer.logoUrl||"",projectImageUrl:customer.projectImageUrl||"" });
     setMessage(""); setShowForm(true);
   }
 
@@ -116,6 +119,8 @@ export default function CustomersPage() {
               <label><span className="label">Distribuidora</span><select className="field" value={form.utility} onChange={(e) => setForm({ ...form, utility: e.target.value })}>{["EDENORTE", "EDESUR", "EDEESTE"].map((v) => <option key={v}>{v}</option>)}</select></label>
               <label><span className="label">Tarifa</span><select className="field" value={form.tariff} onChange={(e) => setForm({ ...form, tariff: e.target.value })}>{["BTS-1", "BTS-2", "BTD", "BTH", "MTD-1", "MTD-2", "MTH"].map((v) => <option key={v}>{v}</option>)}</select></label>
               <label className="sm:col-span-2 lg:col-span-3"><span className="label">Dirección</span><input className="field" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
+              <label className="rounded-xl border border-dashed p-4"><span className="label">Logo del cliente</span><span className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-500"><ImagePlus size={20}/>{form.logoUrl?"Cambiar logo":"Subir logo"}<input className="hidden" type="file" accept="image/png,image/jpeg" onChange={e=>{const file=e.target.files?.[0];if(file)void imageToDataUrl(file,{maxWidth:800,maxHeight:500,outputType:"image/png"}).then(logoUrl=>setForm(old=>({...old,logoUrl})))}}/></span>{form.logoUrl&&<img src={form.logoUrl} alt="Logo del cliente" className="mt-3 h-16 max-w-full object-contain"/>}</label>
+              <label className="rounded-xl border border-dashed p-4 sm:col-span-1 lg:col-span-2"><span className="label">Imagen precargada para portada</span><span className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-500"><ImagePlus size={20}/>{form.projectImageUrl?"Cambiar imagen":"Subir imagen del proyecto"}<input className="hidden" type="file" accept="image/png,image/jpeg" onChange={e=>{const file=e.target.files?.[0];if(file)void imageToDataUrl(file,{maxWidth:1600,maxHeight:1000}).then(projectImageUrl=>setForm(old=>({...old,projectImageUrl})))}}/></span>{form.projectImageUrl&&<img src={form.projectImageUrl} alt="Portada del proyecto" className="mt-3 h-24 w-full rounded-lg object-cover"/>}</label>
               {message && <p className="text-sm font-medium text-primary sm:col-span-2 lg:col-span-3">{message}</p>}
               <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
                 <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : editingId ? <Pencil size={17} /> : <Plus size={17} />}{editingId ? "Actualizar cliente" : "Guardar cliente"}</Button>

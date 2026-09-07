@@ -4,6 +4,7 @@ import {
 } from "docx";
 import sharp from "sharp";
 import { MONTHS, type SolarCalculationResult } from "./solar-calculator";
+import { renderPdfPages } from "./pdf-images";
 
 const PAGE_WIDTH = 12240;
 const PAGE_HEIGHT = 15840;
@@ -14,7 +15,7 @@ const white = "FFFFFF", ink = "172033", gray = "F3F4F6", muted = "64748B";
 
 export interface ProposalDocumentInput {
   company: { name:string; rnc?:string; address?:string; phone?:string; email?:string; website?:string; slogan?:string; logoBase64?:string; coverImageBase64?:string; backCoverImageBase64?:string; primaryColor:string; secondaryColor:string; accentColor:string; proposalValidityDays?:number; itbisEnabled?:boolean; itbisRate?:number };
-  customer: { name:string; nic?:string; address?:string };
+  customer: { name:string; nic?:string; address?:string; logoBase64?:string };
   project: { name:string; city:string; utility:string; tariff:string; systemType:string; panelWatts:number; inverter?:string };
   consumption: number[];
   result: SolarCalculationResult;
@@ -23,6 +24,9 @@ export interface ProposalDocumentInput {
   date?: string;
   selectedEquipmentIds?: string[];
   attachments?: Array<{ equipmentName:string; kind:"DATASHEET"|"CERTIFICATE"; fileName:string; mimeType:string; dataUrl:string }>;
+  selectedEquipment?: Array<{name:string;type:string;warrantyYears?:number|null;logoUrl?:string|null}>;
+  invoice?: {name:string;mimeType:string;dataUrl:string};
+  proposalText?:string;
 }
 
 const cleanHex = (value:string|undefined,fallback:string) => (value||"").replace("#","").match(/^[0-9A-Fa-f]{6}$/)?.[0].toUpperCase() || fallback;
@@ -52,6 +56,18 @@ function imageData(base64:string){
   const match=base64.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
   if(!match)return null;
   return {data:Buffer.from(match[2],"base64"),type:(match[1].toLowerCase()==="png"?"png":"jpg") as "png"|"jpg"};
+}
+function dataUrlBytes(dataUrl:string){const encoded=dataUrl.split(",",2)[1];if(!encoded)throw new Error("Adjunto inválido.");return Buffer.from(encoded,"base64");}
+async function mediaPages(media:{name:string;mimeType:string;dataUrl:string},heading:string,primary:string){
+  const source=dataUrlBytes(media.dataUrl);
+  const pages=media.mimeType==="application/pdf"?await renderPdfPages(new Uint8Array(source),20,1.6):[source];
+  const blocks:(Paragraph|Table)[]=[];
+  for(let index=0;index<pages.length;index+=1){
+    const png=await sharp(pages[index]).png().toBuffer(),meta=await sharp(png).metadata();
+    const ratio=Math.min(590/(meta.width||590),650/(meta.height||650));
+    blocks.push(pageBreak(),p(`${heading}${pages.length>1?` · PÁGINA ${index+1}`:""}`,{bold:true,color:primary,size:22,after:150}),new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({data:png,type:"png",transformation:{width:Math.round((meta.width||590)*ratio),height:Math.round((meta.height||650)*ratio)}})]}));
+  }
+  return blocks;
 }
 function photoBlock(base64:string|undefined,label:string,primary:string,heightLabel="FOTOGRAFÍA AÉREA / PROYECTO") {
   if(base64){
@@ -91,21 +107,22 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   const children:(Paragraph|Table)[]=[];
 
   // 1. Portada - proposal_centerpiece adapted to dynamic brand identity.
-  children.push(photoBlock(input.company.coverImageBase64,input.project.city,primary),empty(160),p(input.company.name.toUpperCase(),{bold:true,color:secondary,size:20,align:AlignmentType.CENTER}),p("PROPUESTA ENERGÉTICA",{bold:true,color:primary,size:38,align:AlignmentType.CENTER,after:80}),p(input.project.name,{color:muted,size:20,align:AlignmentType.CENTER,after:220}));
+  children.push(photoBlock(input.company.coverImageBase64,input.project.city,primary),empty(160),p(input.company.name.toUpperCase(),{bold:true,color:secondary,size:20,align:AlignmentType.CENTER}),p("PROPUESTA ENERGÉTICA",{bold:true,color:primary,size:38,align:AlignmentType.CENTER,after:80}),p(input.project.name,{color:muted,size:20,align:AlignmentType.CENTER,after:120}));
+  if(input.customer.logoBase64){const customerLogo=imageData(input.customer.logoBase64);if(customerLogo)children.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:120},children:[new ImageRun({...customerLogo,transformation:{width:90,height:55}})]}));}
   children.push(table([new TableRow({children:[cell([p("PREPARADO PARA",{bold:true,color:secondary,size:16}),p(input.customer.name,{bold:true,size:27}),p(input.customer.address||input.project.city,{color:muted,size:18})],Math.round(CONTENT_WIDTH*.55),{fill:gray,borderColor:white}),cell([p(`Sistema: ${input.result.installedKwp.toFixed(2)} kWp`,{bold:true,size:18}),p(`NIC: ${input.customer.nic||"N/D"}`,{size:18}),p(`Fecha: ${date}`,{size:18})],Math.round(CONTENT_WIDTH*.45),{fill:gray,borderColor:white})]})],[Math.round(CONTENT_WIDTH*.55),Math.round(CONTENT_WIDTH*.45)],{borderColor:white}),empty(160),table([new TableRow({children:[metricCard("Generación anual",`${num(input.result.annualGeneration)} kWh`,Math.floor(CONTENT_WIDTH/2),primary,white),metricCard("Vida útil", "25+ años",Math.ceil(CONTENT_WIDTH/2),accent,ink)]})],[Math.floor(CONTENT_WIDTH/2),Math.ceil(CONTENT_WIDTH/2)]));
 
   // 2. Descripción y regulación.
-  children.push(pageBreak(),sectionHeading(1,"Descripción y regulación",primary,secondary),p(`La presente propuesta contempla el diseño, suministro, instalación y puesta en marcha de un sistema solar fotovoltaico ${input.project.systemType} de ${input.result.installedKwp.toFixed(2)} kWp para ${input.customer.name}. La solución se dimensionó con las horas solares pico de ${input.project.city} y el historial de consumo disponible.`,{after:180}),p("OBJETIVOS DEL PROYECTO",{bold:true,color:primary,size:22}),p("Reducir el costo energético, estabilizar el gasto operativo y disminuir la huella de carbono mediante generación distribuida confiable y monitoreable."),empty(80));
+  children.push(pageBreak(),sectionHeading(1,"Descripción y regulación",primary,secondary),p(input.proposalText||`La presente propuesta contempla el diseño, suministro, instalación y puesta en marcha de un sistema solar fotovoltaico ${input.project.systemType} de ${input.result.installedKwp.toFixed(2)} kWp para ${input.customer.name}. La solución se dimensionó con las horas solares pico de ${input.project.city} y el historial de consumo disponible.`,{after:180}),p("OBJETIVOS DEL PROYECTO",{bold:true,color:primary,size:22}),p("Reducir el costo energético, estabilizar el gasto operativo y disminuir la huella de carbono mediante generación distribuida confiable y monitoreable."),empty(80));
   children.push(table([new TableRow({children:[cell([p("PROMEDIO DE CONSUMO",{bold:true,color:primary,size:17}),p(`${num(input.result.averageMonthlyConsumption)} kWh/mes`,{bold:true,size:26}),p(`Cobertura estimada: ${input.result.coveragePercent.toFixed(1)}%`,{color:muted,size:18})],CONTENT_WIDTH,{fill:gray,borderColor:secondary})]})],[CONTENT_WIDTH],{borderColor:secondary}),empty(160),p("NOTA REGULATORIA SIE",{bold:true,color:primary,size:22}),p(`Para clientes en tarifas BTS-1 y BTS-2 de EDENORTE, EDESUR o EDEESTE, la energía inyectada a la red está sujeta al cargo regulatorio aplicable del 25%. La valorización final dependerá del esquema de medición, los acuerdos de interconexión y la regulación vigente al momento de aprobación.`,{after:160}),p("El ahorro mostrado es una estimación técnica basada en la tarifa efectiva incorporada al prototipo. La factura final puede incluir cargos fijos, demanda, potencia, impuestos y ajustes no compensables.",{color:muted,size:18}));
 
   // 3. Cotización detallada.
   children.push(pageBreak(),sectionHeading(2,"Cotización detallada",primary,secondary),p(`Resumen: ${input.result.panelCount} módulos bifaciales de ${input.project.panelWatts} W, inversor ${input.project.inverter||"por seleccionar"}, monitoreo, estructura, protecciones, instalación, ingeniería y soporte.`,{after:160}));
   const quoteWidths=[Math.round(CONTENT_WIDTH*.26),Math.round(CONTENT_WIDTH*.44),Math.round(CONTENT_WIDTH*.3)];
   const quoteRows=[new TableRow({tableHeader:true,children:[cell([p("COMPONENTE",{bold:true,color:white,size:17})],quoteWidths[0],{fill:primary,borderColor:primary}),cell([p("DESCRIPCIÓN",{bold:true,color:white,size:17})],quoteWidths[1],{fill:primary,borderColor:primary}),cell([p("MONTO USD",{bold:true,color:white,size:17,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]})];
-  input.quoteItems.forEach((item,index)=>quoteRows.push(new TableRow({children:[cell([p(item.name,{bold:true,size:17})],quoteWidths[0],{fill:index%2?gray:white}),cell([p(item.description||"Incluido",{size:17})],quoteWidths[1],{fill:index%2?gray:white}),cell([p(usd(item.amountUsd),{bold:true,size:17,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
+  input.quoteItems.forEach((item,index)=>quoteRows.push(new TableRow({children:[cell([p(item.name,{bold:true,size:17})],quoteWidths[0],{fill:index%2?gray:white}),cell([p(item.description||"Incluido",{size:17})],quoteWidths[1],{fill:index%2?gray:white}),cell([p(item.amountUsd===0?"INCLUIDO":usd(item.amountUsd),{bold:true,size:17,align:AlignmentType.RIGHT,color:item.amountUsd===0?secondary:ink})],quoteWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
   quoteRows.push(new TableRow({children:[cell([p("SUB-TOTAL",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(quoteSubtotal),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
   if(quoteTax>0)quoteRows.push(new TableRow({children:[cell([p(`ITBIS ${input.company.itbisRate?`(${(input.company.itbisRate*100).toFixed(2)}%)`:""}`.trim(),{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quoteTax),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
-  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("PRECIO POR Wp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(input.result.pricePerWpUsd),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
+  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("PRECIO POR kWp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(input.result.pricePerWpUsd*1000),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
   children.push(table(quoteRows,quoteWidths,{borderColor:primary}));
 
   // 4. Análisis.
@@ -124,6 +141,7 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   children.push(pageBreak(),sectionHeading(5,"Garantías del sistema",primary,secondary));
   const warranties=[["PANELES","Garantía de producto según fabricante y garantía lineal de rendimiento de hasta 25 años. Incluye documentación técnica y trazabilidad de los módulos."],["INVERSORES",`Garantía del fabricante aplicable al modelo ${input.project.inverter||"seleccionado"}. La cobertura requiere instalación, protecciones y condiciones ambientales conforme a ficha técnica.`],["SOPORTE TÉCNICO",`${input.company.name} brinda acompañamiento en puesta en marcha, configuración de monitoreo, orientación operativa y gestión de garantías conforme al alcance contratado.`]];
   warranties.forEach(([title,text],index)=>children.push(table([new TableRow({children:[cell([p(title,{bold:true,color:white,size:22,align:AlignmentType.CENTER})],2200,{fill:[primary,secondary,accent][index],borderColor:white}),cell([p(text,{size:19})],CONTENT_WIDTH-2200,{fill:index===1?gray:white,borderColor:white})]})],[2200,CONTENT_WIDTH-2200],{borderColor:white}),empty(160)));
+  for(const equipment of input.selectedEquipment||[]){const logo=equipment.logoUrl?imageData(equipment.logoUrl):null;children.push(table([new TableRow({children:[cell(logo?[new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({...logo,transformation:{width:75,height:48}})]})]:[p(equipment.type,{bold:true,color:muted,size:16,align:AlignmentType.CENTER})],1800,{fill:gray}),cell([p(equipment.name,{bold:true,size:19}),p(equipment.warrantyYears?`Garantía del fabricante: ${equipment.warrantyYears} años.`:"Garantía según condiciones del fabricante.",{size:17,color:muted})],CONTENT_WIDTH-1800)]})],[1800,CONTENT_WIDTH-1800]),empty(100));}
   children.push(table([new TableRow({children:[cell([p("IMPORTANTE",{bold:true,color:primary,size:18}),p("Las garantías cubren defectos de fabricación; no cubren uso indebido, intervenciones no autorizadas, eventos atmosféricos extremos ni incumplimientos de mantenimiento.",{size:18})],CONTENT_WIDTH,{fill:gray,borderColor:secondary})]})],[CONTENT_WIDTH],{borderColor:secondary}));
 
   // 7. Fases.
@@ -132,7 +150,11 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   phases.forEach((phase,index)=>children.push(table([new TableRow({children:[cell([p(String(index+1),{bold:true,color:index===6?ink:white,size:24,align:AlignmentType.CENTER})],700,{fill:index===6?accent:primary,borderColor:white}),cell([p(phase,{bold:true,size:19})],CONTENT_WIDTH-700,{fill:index%2?gray:white,borderColor:white})]})],[700,CONTENT_WIDTH-700],{borderColor:white}),empty(45)));
   children.push(empty(100),table([new TableRow({children:[cell([p("GESTIÓN INSTITUCIONAL",{bold:true,color:secondary,size:18}),p(`${input.company.name} acompaña el expediente y las gestiones aplicables ante la CNE, la empresa distribuidora y la DGII, sujeto al alcance contratado y a los tiempos de respuesta de cada institución.`,{size:18})],CONTENT_WIDTH,{fill:gray,borderColor:secondary})]})],[CONTENT_WIDTH],{borderColor:secondary}));
 
-  // 8. Contraportada.
+  // Factura y anexos técnicos: siempre antes de la contraportada.
+  if(input.invoice)children.push(...await mediaPages(input.invoice,"FACTURA DEL CLIENTE",primary));
+  for(const attachment of input.attachments||[])children.push(...await mediaPages({name:attachment.fileName,mimeType:attachment.mimeType,dataUrl:attachment.dataUrl},`${attachment.kind==="DATASHEET"?"DATASHEET":"CERTIFICADO"} · ${attachment.equipmentName}`,primary));
+
+  // Contraportada.
   children.push(pageBreak(),photoBlock(input.company.backCoverImageBase64||input.company.coverImageBase64,input.project.city,secondary,"PROYECTO SOLAR"),empty(280),p("ENERGÍA LIMPIA. RESULTADOS MEDIBLES.",{bold:true,color:primary,size:30,align:AlignmentType.CENTER}),p(input.company.slogan||"Ingeniería que transforma energía",{color:secondary,size:22,align:AlignmentType.CENTER,after:260}),table([new TableRow({children:[cell([p(input.company.name,{bold:true,color:white,size:24,align:AlignmentType.CENTER}),p([input.company.phone,input.company.email,input.company.website].filter(Boolean).join("  |  "),{color:white,size:18,align:AlignmentType.CENTER}),p(input.company.address||"República Dominicana",{color:white,size:18,align:AlignmentType.CENTER})],CONTENT_WIDTH,{fill:primary,borderColor:primary})]})],[CONTENT_WIDTH],{borderColor:primary}));
 
   return new Document({

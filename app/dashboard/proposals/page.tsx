@@ -11,7 +11,8 @@ type Proposal = {
   id:string; number:string; projectName:string; status:Status; totalUsd:string; createdAt:string;
   city:string; utility:string; tariff:string; systemType:string; monthlyConsumption:unknown;
   calculationInput:unknown; calculationResult:unknown; quoteItems:unknown; selectedInverterId?:string|null; manualInverter?:string|null;
-  customer:{name:string;nic?:string|null;address?:string|null}; createdBy:{name:string};
+  customer:{name:string;nic?:string|null;address?:string|null;logoUrl?:string|null}; createdBy:{name:string};
+  projectImageUrl?:string|null;notes?:string|null;invoiceName?:string|null;invoiceMimeType?:string|null;invoiceData?:string|null;
 };
 type Company = {name:string;primaryColor:string;secondaryColor:string;accentColor:string;[key:string]:unknown};
 
@@ -34,8 +35,12 @@ export default function ProposalsPage(){
     setBusy(`${format}-${proposal.id}`);setMessage("");
     try{
       if(!company)throw new Error("No se pudo cargar la información de la empresa.");
-      const input=proposal.calculationInput as Record<string,unknown>;
-      const payload={company:{...company,logoBase64:company.logoUrl,coverImageBase64:company.coverImageUrl||(Array.isArray(company.coverImages)?company.coverImages[0]:undefined),backCoverImageBase64:company.backCoverImageUrl||(Array.isArray(company.coverImages)?company.coverImages[1]||company.coverImages[0]:undefined),itbisRate:company.itbisRate==null?undefined:Number(company.itbisRate)},customer:proposal.customer,project:{name:proposal.projectName,city:proposal.city,utility:proposal.utility,tariff:proposal.tariff,systemType:proposal.systemType,panelWatts:Number(input.panelWatts)||0,inverter:String(input.inverter||proposal.manualInverter||"Por seleccionar")},consumption:proposal.monthlyConsumption,result:proposal.calculationResult,quoteItems:proposal.quoteItems,proposalNumber:proposal.number,date:new Intl.DateTimeFormat("es-DO",{dateStyle:"long"}).format(new Date(proposal.createdAt)),selectedEquipmentIds:[input.panelEquipmentId,proposal.selectedInverterId,input.batteryEquipmentId].filter(Boolean)};
+      const detailResponse=await fetch(`/api/proposals?id=${encodeURIComponent(proposal.id)}`);
+      const detail=await detailResponse.json();
+      if(!detailResponse.ok)throw new Error(detail.error||"No se pudo cargar la propuesta completa.");
+      const full=detail as Proposal;
+      const input=full.calculationInput as Record<string,unknown>;
+      const payload={company:{...company,logoBase64:company.logoUrl,coverImageBase64:full.projectImageUrl||company.coverImageUrl||(Array.isArray(company.coverImages)?company.coverImages[0]:undefined),backCoverImageBase64:company.backCoverImageUrl||(Array.isArray(company.coverImages)?company.coverImages[1]||company.coverImages[0]:undefined),itbisRate:company.itbisRate==null?undefined:Number(company.itbisRate)},customer:{...full.customer,logoBase64:full.customer.logoUrl},project:{name:full.projectName,city:full.city,utility:full.utility,tariff:full.tariff,systemType:full.systemType,panelWatts:Number(input.panelWatts)||0,inverter:String(input.inverter||full.manualInverter||"Por seleccionar")},consumption:full.monthlyConsumption,result:full.calculationResult,quoteItems:full.quoteItems,proposalText:full.notes||undefined,invoice:full.invoiceData?{name:full.invoiceName||"factura.pdf",mimeType:full.invoiceMimeType||"application/pdf",dataUrl:full.invoiceData}:undefined,proposalNumber:full.number,date:new Intl.DateTimeFormat("es-DO",{dateStyle:"long"}).format(new Date(full.createdAt)),selectedEquipmentIds:[input.panelEquipmentId,full.selectedInverterId,input.batteryEquipmentId].filter(Boolean)};
       const response=await fetch(`/api/proposals/${format}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.error||`No se pudo generar el ${format.toUpperCase()}.`)}
       const blob=await response.blob(),url=URL.createObjectURL(blob),anchor=document.createElement("a");anchor.href=url;anchor.download=`${proposal.number.toLowerCase()}.${format}`;document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);

@@ -61,4 +61,21 @@ PAGUE ANTES DE 04/09/2026`;
     expect(result.consumption[0]).toEqual({month:9,year:2025,kwh:56400});
     expect(result.consumption.at(-1)).toEqual({month:8,year:2026,kwh:81000});
   });
+  it("interpreta el historial horizontal extraído de una factura residencial EDENORTE",()=>{
+    const text=`Edenorte Dominicana, S.A.
+CONTRATO : NOMBRE O RAZON SOCIAL: Oficina No. Factura FECHA EMISION
+HISTORICO DE CONSUMOS
+Mes Mes Csmo Pot. kWh
+CLIENTE DE PRUEBA 5113677 CLIENTE DE PRUEBA 08/08/2026
+Ago 2025 Sep Oct Nov Dic Ene Feb Mar Abr May Jun Jul Ago 2026
+331 389 351 287 230 323 283 252 278 317 333 351 371
+CALLE PRINCIPAL 69 Baja 120 Monofásica BTS-1`;
+    const result=parseElectricInvoice(text);
+    expect(result.recognized).toBe(true);
+    expect(result.nic).toBe("5113677");
+    expect(result.tariff).toBe("BTS-1");
+    expect(result.consumption).toHaveLength(12);
+    expect(result.consumption[0]).toEqual({month:9,year:2025,kwh:389});
+    expect(result.consumption.at(-1)).toEqual({month:8,year:2026,kwh:371});
+  });
 });

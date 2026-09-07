@@ -91,6 +91,8 @@ model Customer {
   city      String?
   utility   String?
   tariff    String?
+  logoUrl   String?    @db.Text
+  projectImageUrl String? @db.Text
   proposals Proposal[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -112,6 +114,7 @@ model EquipmentInventory {
   unitCostUsd    Decimal       @db.Decimal(12, 2)
   quantity       Int           @default(0)
   warrantyYears  Int?
+  logoUrl         String?       @db.Text
   datasheetName  String?
   datasheetMimeType String?
   datasheetData  String?       @db.Text
@@ -154,6 +157,10 @@ model Proposal {
   totalUsd            Decimal        @db.Decimal(12, 2)
   validUntil          DateTime
   notes               String?
+  projectImageUrl     String?         @db.Text
+  invoiceName         String?
+  invoiceMimeType     String?
+  invoiceData         String?         @db.Text
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Boxes, FileCheck2, FileText, Loader2, Pencil, Plus } from "lucide-react";
+import { Boxes, FileCheck2, FileText, ImagePlus, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { imageToDataUrl } from "@/lib/client-images";
 
 type Equipment = {
   id: string;
@@ -19,6 +20,7 @@ type Equipment = {
   datasheetName?: string | null;
   certificateName?: string | null;
   active: boolean;
+  logoUrl?: string | null;
 };
 
 const typeLabels: Record<Equipment["type"], string> = {
@@ -30,7 +32,7 @@ const typeLabels: Record<Equipment["type"], string> = {
   OTHER: "Otro",
 };
 
-const emptyForm = { type: "PANEL" as Equipment["type"], brand: "", model: "", description: "", powerWatts: "", capacityKwh: "", unitCostUsd: "", quantity: 1, warrantyYears: "" };
+const emptyForm = { type: "PANEL" as Equipment["type"], brand: "", model: "", description: "", powerWatts: "", capacityKwh: "", unitCostUsd: "", quantity: 1, warrantyYears: "",logoUrl:"" };
 
 export default function EquipmentPage() {
   const [items, setItems] = useState<Equipment[]>([]);
@@ -67,6 +69,7 @@ export default function EquipmentPage() {
       unitCostUsd: Number(form.unitCostUsd),
       quantity: Number(form.quantity),
       warrantyYears: form.warrantyYears ? Number(form.warrantyYears) : null,
+      logoUrl:form.logoUrl||null,
     };
     const response = await fetch("/api/equipment", {
       method: editingId ? "PATCH" : "POST",
@@ -92,7 +95,7 @@ export default function EquipmentPage() {
 
   function edit(item: Equipment) {
     setEditingId(item.id);
-    setForm({ type: item.type, brand: item.brand, model: item.model, description: item.description || "", powerWatts: item.powerWatts?.toString() || "", capacityKwh: item.capacityKwh?.toString() || "", unitCostUsd: item.unitCostUsd, quantity: item.quantity, warrantyYears: item.warrantyYears?.toString() || "" });
+    setForm({ type: item.type, brand: item.brand, model: item.model, description: item.description || "", powerWatts: item.powerWatts?.toString() || "", capacityKwh: item.capacityKwh?.toString() || "", unitCostUsd: item.unitCostUsd, quantity: item.quantity, warrantyYears: item.warrantyYears?.toString() || "",logoUrl:item.logoUrl||"" });
     setDatasheet(null); setCertificate(null); setMessage(""); setShowForm(true);
   }
 
@@ -121,6 +124,7 @@ export default function EquipmentPage() {
               <label><span className="label">Existencia</span><input className="field" type="number" min="0" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} /></label>
               <label><span className="label">Garantía (años)</span><input className="field" type="number" min="0" value={form.warrantyYears} onChange={(e) => setForm({ ...form, warrantyYears: e.target.value })} /></label>
               <label className="sm:col-span-2 lg:col-span-3"><span className="label">Descripción</span><input className="field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+              <label className="rounded-xl border border-dashed p-4 sm:col-span-2 lg:col-span-3"><span className="label">Logo del fabricante o equipo</span><span className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-500"><ImagePlus size={18}/>{form.logoUrl?"Cambiar logo":"Subir logo"}<input className="hidden" type="file" accept="image/png,image/jpeg" onChange={e=>{const file=e.target.files?.[0];if(file)void imageToDataUrl(file,{maxWidth:800,maxHeight:500,outputType:"image/png"}).then(logoUrl=>setForm(old=>({...old,logoUrl})))}}/></span>{form.logoUrl&&<img src={form.logoUrl} alt="Logo del equipo" className="mt-3 h-16 max-w-full object-contain"/>}</label>
               <label className="sm:col-span-1"><span className="label">Datasheet (opcional)</span><input className="field file:mr-3 file:border-0 file:bg-transparent file:font-semibold" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setDatasheet(e.target.files?.[0] || null)} /><span className="mt-1 block text-xs text-slate-500">PDF, PNG o JPG · máximo 4 MB</span></label>
               <label className="sm:col-span-1"><span className="label">Certificado (opcional)</span><input className="field file:mr-3 file:border-0 file:bg-transparent file:font-semibold" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setCertificate(e.target.files?.[0] || null)} /><span className="mt-1 block text-xs text-slate-500">PDF, PNG o JPG · máximo 4 MB</span></label>
               {message && <p className="text-sm font-medium text-primary sm:col-span-2 lg:col-span-3">{message}</p>}
@@ -156,7 +160,7 @@ export default function EquipmentPage() {
                   {items.map((item) => (
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="px-3 py-4"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{typeLabels[item.type]}</span></td>
-                      <td className="px-3 py-4 font-semibold">{item.brand}</td>
+                      <td className="px-3 py-4 font-semibold"><span className="flex items-center gap-2">{item.logoUrl&&<img src={item.logoUrl} alt="" className="size-8 rounded object-contain"/>}{item.brand}</span></td>
                       <td className="px-3 py-4">{item.model}</td>
                       <td className="px-3 py-4 text-slate-500">{item.powerWatts ? `${item.powerWatts} W` : "—"}</td>
                       <td className="px-3 py-4 text-slate-500">{item.capacityKwh ? `${Number(item.capacityKwh).toFixed(2)} kWh` : "—"}</td>

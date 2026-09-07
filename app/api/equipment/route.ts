@@ -6,6 +6,7 @@ const equipmentSelect = {
   id: true, type: true, brand: true, model: true, description: true, powerWatts: true,
   capacityKwh: true, unitCostUsd: true, quantity: true, warrantyYears: true, active: true,
   datasheetName: true, datasheetMimeType: true, certificateName: true, certificateMimeType: true,
+  logoUrl:true,
 } as const;
 
 export async function GET(request: NextRequest) {
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       capacityKwh: body.capacityKwh == null ? null : Number(body.capacityKwh),
       unitCostUsd: Number(body.unitCostUsd), quantity: Math.max(0, Number(body.quantity || 0)),
       warrantyYears: body.warrantyYears == null ? null : Number(body.warrantyYears),
+      logoUrl:body.logoUrl||null,
     }, select: equipmentSelect });
     return NextResponse.json(equipment, { status: 201 });
   } catch (error) {
@@ -56,6 +58,7 @@ export async function PATCH(request: NextRequest) {
       capacityKwh: body.capacityKwh == null ? null : Number(body.capacityKwh),
       unitCostUsd: Number(body.unitCostUsd), quantity: Math.max(0, Number(body.quantity || 0)),
       warrantyYears: body.warrantyYears == null ? null : Number(body.warrantyYears),
+      logoUrl:body.logoUrl||null,
     }, select: equipmentSelect });
     return NextResponse.json(equipment);
   } catch (error) {

@@ -2,7 +2,7 @@ import { createCanvas } from "@napi-rs/canvas";
 
 export async function renderPdfPages(bytes:Uint8Array,maxPages=3,scale=2.2):Promise<Buffer[]>{
   const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask=pdfjs.getDocument({data:bytes,disableFontFace:true,useSystemFonts:false,verbosity:0});
+  const loadingTask=pdfjs.getDocument({data:bytes,disableFontFace:false,useSystemFonts:true,verbosity:0});
   const pdf=await loadingTask.promise;
   try{
     const images:Buffer[]=[];

@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
         city: body.city ? String(body.city).trim() : null,
         utility: body.utility ? String(body.utility).trim() : null,
         tariff: body.tariff ? String(body.tariff).trim() : null,
+        logoUrl: body.logoUrl || null,
+        projectImageUrl: body.projectImageUrl || null,
       },
     });
     return NextResponse.json(customer, { status: 201 });
@@ -69,6 +71,7 @@ export async function PATCH(request: NextRequest) {
       phone: body.phone ? String(body.phone).trim() : null, address: body.address ? String(body.address).trim() : null,
       city: body.city ? String(body.city).trim() : null, utility: body.utility ? String(body.utility).trim() : null,
       tariff: body.tariff ? String(body.tariff).trim() : null,
+      logoUrl: body.logoUrl || null, projectImageUrl: body.projectImageUrl || null,
     } });
     return NextResponse.json(customer);
   } catch (error) {

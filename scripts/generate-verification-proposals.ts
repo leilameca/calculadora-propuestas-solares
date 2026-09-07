@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { Packer } from "docx";
 import { buildProposalDocument, type ProposalDocumentInput } from "../lib/docx-builder";
 import { buildProposalPdf } from "../lib/pdf-builder";
@@ -62,6 +62,17 @@ const payload: ProposalDocumentInput = {
 };
 
 async function main() {
+  const logoData=`data:image/png;base64,${(await readFile("Gemini_Generated_Image_ahdcdkahdcdkahdc-removebg-preview.png")).toString("base64")}`;
+  payload.company.logoBase64=logoData;
+  payload.customer.logoBase64=logoData;
+  payload.proposalText="Esta propuesta puede personalizarse para reflejar las prioridades técnicas y económicas acordadas con el cliente.";
+  payload.selectedEquipment=[{name:"Panel HelioPro 590 W",type:"PANEL",warrantyYears:25,logoUrl:logoData},{name:"Inversor HelioPro 50 kW",type:"INVERTER",warrantyYears:10,logoUrl:logoData}];
+  const invoicePath=process.env.QA_INVOICE_PATH;
+  if(invoicePath){
+    const invoiceData=`data:application/pdf;base64,${(await readFile(invoicePath)).toString("base64")}`;
+    payload.invoice={name:"factura-cliente.pdf",mimeType:"application/pdf",dataUrl:invoiceData};
+    payload.attachments=[{equipmentName:"Panel HelioPro 590 W",kind:"DATASHEET",fileName:"datasheet-panel.pdf",mimeType:"application/pdf",dataUrl:invoiceData}];
+  }
   await mkdir("output/pdf", { recursive: true });
   await mkdir("qa-docx", { recursive: true });
   const document = await buildProposalDocument(payload);

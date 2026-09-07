@@ -36,7 +36,12 @@ function cleanFieldValue(value: string): string {
 function extractCustomerName(normalized: string): string | undefined {
   // Prioridad 1: "NOMBRE O RAZON SOCIAL" (con o sin acento)
   const match = normalized.match(/NOMBRE\s+O\s+RAZ[ÓO]N\s+SOCIAL\s*[:#-]?\s*([^\n]{3,80})/i);
-  if (match?.[1]?.trim()) return cleanFieldValue(match[1]);
+  if (match?.[1]?.trim() && !/^(?:OFICINA|NO\.\s*FACTURA|FECHA\s+EMISION)/i.test(match[1].trim())) return cleanFieldValue(match[1]);
+
+  // Algunas facturas EDENORTE posicionan primero todas las etiquetas y luego
+  // sus valores. En ese PDF el nombre aparece después del encabezado de kWh.
+  const horizontal = normalized.match(/Mes\s+Mes\s+Csmo\s+Pot\.?\s+kWh\s+(.{3,80}?)\s+(\d{6,10})\s+/i);
+  if (horizontal?.[1]) return horizontal[1].trim();
 
   // Prioridad 2: "NOMBRE" genérico (evitando TITULAR DE PAGO)
   const generic = normalized.match(/(?:^|\n)\s*NOMBRE\s*[:#-]?\s*([^\n]{3,80})/i);
@@ -53,8 +58,10 @@ function extractNic(normalized: string): string | undefined {
   ];
   for (const pattern of patterns) {
     const match = normalized.match(pattern);
-    if (match?.[1]) return match[1].trim();
+    if (match?.[1] && /\d/.test(match[1])) return match[1].trim();
   }
+  const horizontal = normalized.match(/Mes\s+Mes\s+Csmo\s+Pot\.?\s+kWh\s+.{3,80}?\s+(\d{6,10})\s+/i);
+  if (horizontal?.[1]) return horizontal[1];
   return undefined;
 }
 
@@ -73,9 +80,46 @@ function extractAddress(normalized: string): string | undefined {
   ];
   for (const pattern of patterns) {
     const match = normalized.match(pattern);
-    if (match?.[1]?.trim()) return cleanFieldValue(match[1]);
+    if (match?.[1]?.trim() && !/CODIGO\s+GEOGRAFICO|@|\bCONTRATO\b/i.test(match[1])) return cleanFieldValue(match[1]);
   }
+  const horizontal = normalized.match(/\b((?:CALLE|AV(?:ENIDA|DA)?|CARRETERA|AUTOPISTA)\s+.{4,100}?)\s+(?:Baja|Media)\b/i);
+  if (horizontal?.[1]) return horizontal[1].trim();
   return undefined;
+}
+
+function extractHorizontalHistory(normalized: string): BilledConsumption[] {
+  const monthPattern = "(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)";
+  const historyStart=normalized.search(/HIST[ÓO]RICO\s+DE\s+CONSUM/i);
+  if(historyStart<0)return [];
+  const history=normalized.slice(historyStart);
+  const candidates=[...history.matchAll(new RegExp(`\\b(${monthPattern})(?:\\s+(20\\d{2}))?`,"gi"))];
+  let months:RegExpMatchArray[]=[];
+  for(let start=0;start<candidates.length;start+=1){
+    const sequence=[candidates[start]];
+    for(let index=start+1;index<candidates.length;index+=1){
+      const previous=candidates[index-1],current=candidates[index];
+      const between=history.slice((previous.index||0)+previous[0].length,current.index);
+      if(!/^\s*$/.test(between))break;
+      sequence.push(current);
+    }
+    if(sequence.length>months.length)months=sequence;
+  }
+  if(months.length<3)return [];
+  const last=months.at(-1)!;
+  const after=history.slice((last.index||0)+last[0].length);
+  const values=[...after.matchAll(/\d[\d.,]*/g)].map((item)=>parseNumber(item[0])).slice(0,months.length);
+  if (months.length < 3 || values.length < months.length) return [];
+  let year: number | undefined;
+  let previousMonth: number | undefined;
+  const records = months.map((match,index)=>{
+    const month=MONTH_ALIASES[match[1].toLowerCase()];
+    const explicitYear=match[2]?Number(match[2]):undefined;
+    if(explicitYear)year=explicitYear;
+    else if(year&&previousMonth&&month<previousMonth)year+=1;
+    previousMonth=month;
+    return year?{month,year,kwh:values[index]}:null;
+  }).filter((item):item is BilledConsumption=>Boolean(item&&item.kwh>0&&item.kwh<1000000));
+  return records.slice(-12);
 }
 
 function parseNumber(raw: string): number {
@@ -120,6 +164,8 @@ function extractEdenorteHistory(normalized: string): BilledConsumption[] {
 }
 
 function extractConsumption(normalized: string): BilledConsumption[] {
+  const horizontalRecords = extractHorizontalHistory(normalized);
+  if (horizontalRecords.length >= 3) return horizontalRecords;
   const historyRecords = extractEdenorteHistory(normalized);
   if (historyRecords.length >= 3) {
     const uniqueHistory = [...new Map(historyRecords.map((item) => [`${item.year}-${item.month}`, item])).values()]

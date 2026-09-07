@@ -2,7 +2,6 @@
 
 import { BarChart3, Boxes, Building2, FileText, LayoutDashboard, LogOut, Menu, ShieldCheck, Users, X } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,7 +26,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-slate-50">
     <aside className={cn("fixed inset-y-0 left-0 z-40 w-64 border-r bg-slate-950 text-white transition-transform lg:translate-x-0", open ? "translate-x-0" : "-translate-x-full")}>
       <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
-        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-black tracking-tight"><Image src="/heliopro-logo.webp" alt="HelioPro" width={38} height={25} priority/>HELIO<span className="-ml-2 text-accent">PRO</span></Link>
+        <Link href="/dashboard" className="flex min-w-0 items-center gap-2 text-lg font-black tracking-tight">
+          <img src="/heliopro-logo.webp" alt="HelioPro" className="h-9 w-12 shrink-0 object-contain" />
+          <span className="whitespace-nowrap">HELIO<span className="text-accent">PRO</span></span>
+        </Link>
         <button className="lg:hidden" onClick={() => setOpen(false)} aria-label="Cerrar menú"><X size={20} /></button>
       </div>
       <nav className="space-y-1 p-3">{nav.filter(([href])=>href!=="/dashboard/admin"||role==="SUPERADMIN").map(([href, label, Icon]) => <Link key={href} href={href} onClick={() => setOpen(false)} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white", pathname === href && "bg-primary text-white")}><Icon size={18} />{label}</Link>)}</nav>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildProposalPdf } from "@/lib/pdf-builder";
 import type { ProposalDocumentInput } from "@/lib/docx-builder";
 import { sessionFromRequest } from "@/lib/auth";
+import { addTenantEquipmentAttachments } from "@/lib/equipment-attachments";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const session=await sessionFromRequest(request);
     if(!session?.companyId)return NextResponse.json({error:"No autorizado"},{status:401});
-    const payload = await request.json() as ProposalDocumentInput;
+    const payload = await addTenantEquipmentAttachments(await request.json() as ProposalDocumentInput,session.companyId);
     const bytes = await buildProposalPdf(payload);
     return new NextResponse(Buffer.from(bytes), {
       status: 200,
