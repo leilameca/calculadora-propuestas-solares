@@ -136,6 +136,7 @@ model Proposal {
   createdById         String
   createdBy           User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
   status              ProposalStatus @default(DRAFT)
+  version             Int            @default(1)
   projectName         String
   systemType          String
   city                String

@@ -25,6 +25,8 @@ export function SolarCalculatorApp() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [exporting, setExporting] = useState<"docx"|"pdf"|null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingNumber, setEditingNumber] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [ocrMessage,setOcrMessage]=useState("");
   const [company,setCompany]=useState<CompanyBrand>(defaultCompany);
@@ -34,12 +36,33 @@ export function SolarCalculatorApp() {
   useEffect(()=>{fetch("/api/company").then(r=>r.ok?r.json():null).then(data=>{if(!data)return;setCompany({...defaultCompany,...data,coverImages:Array.isArray(data.coverImages)?data.coverImages:[]});setInputs(old=>({...old,itbisEnabled:data.itbisEnabled!==false,itbisRate:data.itbisRate == null ? 0.18 : Number(data.itbisRate)}))}).catch(()=>undefined)},[]);
   useEffect(()=>{fetch("/api/equipment").then(r=>r.ok?r.json():[]).then(data=>setInventory(Array.isArray(data)?data:[])).catch(()=>setInventory([]))},[]);
   useEffect(()=>{fetch("/api/customers").then(r=>r.ok?r.json():[]).then(data=>setCustomers(Array.isArray(data)?data:[])).catch(()=>setCustomers([]))},[]);
+  useEffect(()=>{
+    const proposalId = new URLSearchParams(window.location.search).get("proposal");
+    if (!proposalId) return;
+    fetch(`/api/proposals?id=${encodeURIComponent(proposalId)}`).then(async response=>{
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.error||"No se pudo abrir la propuesta.");
+      const savedInput=(data.calculationInput&&typeof data.calculationInput==="object"?data.calculationInput:{}) as Partial<Inputs>&{billedRecords?:BilledConsumption[];averageCount?:number;useAverage?:boolean};
+      setEditingId(data.id);setEditingNumber(data.number);
+      setInputs(old=>({...old,...savedInput,client:data.customer?.name||old.client,nic:data.customer?.nic||"",address:data.customer?.address||"",city:(data.city||old.city) as Inputs["city"],utility:(data.utility||old.utility) as Utility,tariff:(data.tariff||old.tariff) as Tariff,systemType:data.systemType||old.systemType,exchangeRate:Number(data.exchangeRate)||old.exchangeRate}));
+      const stored=Array.isArray(data.monthlyConsumption)?data.monthlyConsumption.map(Number):[];
+      if(stored.length===12)setConsumption(stored);
+      const records=Array.isArray(savedInput.billedRecords)?savedInput.billedRecords:stored.map((kwh:number,month:number)=>({month:month+1,year:new Date().getFullYear(),kwh})).filter((item:BilledConsumption)=>item.kwh>0);
+      setBilledRecords(records);
+      if(savedInput.averageCount)setAverageCount(savedInput.averageCount);
+      setUseAverage(Boolean(savedInput.useAverage));
+      const extras=Array.isArray(data.quoteItems)?data.quoteItems.filter((item:{description?:string})=>item.description==="Adicional solicitado").map((item:{name:string;amountUsd:number},index:number)=>({id:Date.now()+index,name:item.name,amount:String(item.amountUsd)})):[];
+      setAdditionalItems(extras);
+      setSaveMessage(`Editando ${data.number}`);
+    }).catch(error=>setSaveMessage(error instanceof Error?error.message:"No se pudo abrir la propuesta."));
+  },[]);
 
   const effectiveConsumption = useMemo(() => {
     if (!useAverage) return consumption;
     const average = latestBilledAverage(billedRecords,averageCount);
     return Array(12).fill(average);
   }, [consumption,billedRecords, averageCount, useAverage]);
+  const averagedPeriods = useMemo(()=>billedRecords.filter(record=>record.kwh>0).sort((a,b)=>(b.year-a.year)||(b.month-a.month)).slice(0,averageCount),[billedRecords,averageCount]);
 
   const result = useMemo(() => {
     try { return calculateSolar({ consumption: effectiveConsumption, hsp:HSP_BY_CITY[inputs.city], oversizingFactor:inputs.oversizingFactor, panelWatts:inputs.panelWatts, costPerWpUsd:inputs.costPerWpUsd, exchangeRate:inputs.exchangeRate, utility:inputs.utility, tariff:inputs.tariff,itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate,designMode:inputs.designMode,manualPanelCount:inputs.manualPanelCount }); }
@@ -75,8 +98,8 @@ export function SolarCalculatorApp() {
       const errorData = response.ok ? null : await response.json().catch(() => null);
       if (!response.ok) throw new Error(errorData?.error || "No fue posible leer la factura");
       const data = await response.json();
-      if(data.requiresManualEntry){setOcrMessage("No se encontró un historial de consumo suficiente. Los campos manuales permanecen habilitados para completar la propuesta.");return;}
       setInputs((old)=>({...old,client:data.customerName||old.client,nic:data.nic||old.nic,address:data.address||old.address,tariff:data.tariff||old.tariff,utility:data.utility||old.utility}));
+      if(data.requiresManualEntry){setOcrMessage("La factura se leyó parcialmente, pero no se encontró un historial de consumo suficiente. Revisa los datos y completa los consumos manualmente.");return;}
       if (data.consumption?.length){setBilledRecords(data.consumption);setConsumption(MONTHS.map((_,i)=>Number(data.consumption.find((x:{month:number})=>x.month===i+1)?.kwh||0)));setOcrMessage(`Factura ${data.utility||"eléctrica"} procesada: ${data.consumption.length} meses recientes, excluyendo cualquier mes base repetido.`);}
     } catch (error) {
       setOcrMessage(error instanceof Error ? error.message : "No fue posible leer la factura.");
@@ -89,9 +112,10 @@ export function SolarCalculatorApp() {
     setSaveMessage("");
     try {
       const response = await fetch("/api/proposals", {
-        method: "POST",
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingId,
           customerName: inputs.client || "Cliente de demostración",
           customerId: customers.find((customer)=>customer.name===inputs.client&&customer.nic===inputs.nic)?.id || null,
           customerNic: inputs.nic || null,
@@ -102,7 +126,7 @@ export function SolarCalculatorApp() {
           utility: inputs.utility,
           tariff: inputs.tariff,
           monthlyConsumption: effectiveConsumption,
-          calculationInput: { ...inputs, hsp: HSP_BY_CITY[inputs.city] },
+          calculationInput: { ...inputs, hsp: HSP_BY_CITY[inputs.city], billedRecords, averageCount, useAverage },
           calculationResult: result,
           quoteItems: quoteItems(),
           selectedInverterId: selectedInverter?.id || null,
@@ -112,7 +136,8 @@ export function SolarCalculatorApp() {
         }),
       });
       const data = await response.json();
-      setSaveMessage(response.ok ? `Borrador guardado: ${data.number}` : data.error || "No se pudo guardar.");
+      if(response.ok&&!editingId){setEditingId(data.id);setEditingNumber(data.number);window.history.replaceState(null,"",`/dashboard/calculator?proposal=${encodeURIComponent(data.id)}`);}
+      setSaveMessage(response.ok ? `${editingId ? "Cambios guardados" : "Borrador guardado"}: ${data.number}` : data.error || "No se pudo guardar.");
     } catch {
       setSaveMessage("Error de red al guardar el borrador.");
     } finally {
@@ -145,9 +170,9 @@ export function SolarCalculatorApp() {
   }
 
   return <div className="mx-auto max-w-7xl space-y-6">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-primary">Nueva propuesta</p><h1 className="text-3xl font-black tracking-tight">Dimensionamiento solar</h1><p className="mt-1 text-sm text-slate-500">Calcula, compara y exporta una propuesta comercial editable.</p></div><div className="flex flex-col items-end gap-1"><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={saveDraft} disabled={!result||saving}>{saving?<Loader2 className="animate-spin" size={17}/>:<Save size={17}/>}Guardar borrador</Button><Button variant="outline" onClick={()=>void exportProposal("pdf")} disabled={!result||Boolean(exporting)}>{exporting==="pdf"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar PDF</Button><Button onClick={()=>void exportProposal("docx")} disabled={!result||Boolean(exporting)}>{exporting==="docx"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar Word</Button></div>{saveMessage&&<p className="text-xs font-semibold text-primary">{saveMessage}</p>}</div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-primary">{editingId?`Editando ${editingNumber||"propuesta"}`:"Nueva propuesta"}</p><h1 className="text-3xl font-black tracking-tight">Dimensionamiento solar</h1><p className="mt-1 text-sm text-slate-500">Calcula, compara y exporta una propuesta comercial editable.</p></div><div className="flex flex-col items-end gap-1"><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={saveDraft} disabled={!result||saving}>{saving?<Loader2 className="animate-spin" size={17}/>:<Save size={17}/>}{editingId?"Guardar cambios":"Guardar borrador"}</Button><Button variant="outline" onClick={()=>void exportProposal("pdf")} disabled={!result||Boolean(exporting)}>{exporting==="pdf"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar PDF</Button><Button onClick={()=>void exportProposal("docx")} disabled={!result||Boolean(exporting)}>{exporting==="docx"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar Word</Button></div>{saveMessage&&<p className="text-xs font-semibold text-primary">{saveMessage}</p>}</div></div>
 
-    <Card className="border-dashed border-primary/30 bg-primary/[.03]"><CardContent className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary"><FileScan size={20}/></div><div><p className="text-sm font-bold">Lectura inteligente de factura eléctrica</p><p className="text-xs text-slate-500">PDF, PNG o JPG de EDENORTE, EDESUR o EDEESTE. Los formatos no reconocidos permiten completar los datos manualmente.</p>{ocrMessage&&<p className="mt-1 text-xs font-semibold text-primary">{ocrMessage}</p>}</div></div><label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border bg-white px-4 text-sm font-semibold hover:bg-slate-50"><input type="file" accept="image/png,image/jpeg,.pdf" className="hidden" onChange={(e)=>scan(e.target.files?.[0])}/>{ocrBusy?<Loader2 size={17} className="animate-spin"/>:<Upload size={17}/>}Analizar factura</label></CardContent></Card>
+    <Card className="border-dashed border-primary/30 bg-primary/[.03]"><CardContent className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary"><FileScan size={20}/></div><div><p className="text-sm font-bold">Lectura inteligente de factura eléctrica</p><p className="text-xs text-slate-500">PDF, PNG o JPG de EDENORTE, EDESUR o EDEESTE. Los formatos no reconocidos permiten completar los datos manualmente.</p>{ocrMessage&&<p className="mt-1 text-xs font-semibold text-primary">{ocrMessage}</p>}</div></div><label className={`inline-flex h-10 items-center gap-2 rounded-md border bg-white px-4 text-sm font-semibold hover:bg-slate-50 ${ocrBusy?"cursor-wait opacity-60":"cursor-pointer"}`}><input type="file" accept="image/png,image/jpeg,.pdf" disabled={ocrBusy} className="hidden" onChange={e=>{const file=e.target.files?.[0];e.currentTarget.value="";void scan(file)}}/>{ocrBusy?<Loader2 size={17} className="animate-spin"/>:<Upload size={17}/>}Analizar factura</label></CardContent></Card>
 
     <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
       <div className="space-y-6"><Card><CardHeader><CardTitle>Cliente y suministro</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
@@ -157,7 +182,7 @@ export function SolarCalculatorApp() {
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Configuración técnica</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><Field label="Tipo de sistema"><select className="field" value={inputs.systemType} onChange={e=>set("systemType",e.target.value)}><option>On-Grid</option><option>Híbrido</option><option>Off-Grid</option></select></Field><Field label="Modo de diseño"><select className="field" value={inputs.designMode} onChange={e=>set("designMode",e.target.value as Inputs["designMode"])}><option value="automatic">Automático (según consumo)</option><option value="manual">Manual (cantidad de paneles)</option></select></Field>{inputs.designMode==="manual"&&<NumberField label="Cantidad de paneles" value={inputs.manualPanelCount} onChange={v=>set("manualPanelCount",v)}/>}<Field label="Panel del inventario"><select className="field" value={inputs.panelEquipmentId} onChange={e=>{const id=e.target.value,item=inventory.find(candidate=>candidate.id===id);setInputs(old=>({...old,panelEquipmentId:id,panelWatts:item?.powerWatts||old.panelWatts}))}}><option value="">Configuración manual</option>{inventory.filter(item=>item.type==="PANEL").map(item=><option key={item.id} value={item.id}>{equipmentLabel(item)}</option>)}</select></Field><NumberField label="Panel (W)" value={inputs.panelWatts} onChange={v=>set("panelWatts",v)}/><NumberField label="Sobredimensionamiento" value={inputs.oversizingFactor} step="0.05" onChange={v=>set("oversizingFactor",v)}/><NumberField label="Costo USD/Wp" value={inputs.costPerWpUsd} step="0.01" onChange={v=>set("costPerWpUsd",v)}/><NumberField label="Tasa RD$/USD" value={inputs.exchangeRate} step="0.01" onChange={v=>set("exchangeRate",v)}/><Field label="Aplicar ITBIS"><select className="field" value={inputs.itbisEnabled?"yes":"no"} onChange={e=>set("itbisEnabled",e.target.value==="yes")}><option value="yes">Sí</option><option value="no">No</option></select></Field><Field label="Tasa ITBIS (%)"><input className="field text-right disabled:cursor-not-allowed disabled:bg-slate-100" type="number" min="0" max="100" step="0.01" disabled={!inputs.itbisEnabled} value={inputs.itbisRate*100} onChange={e=>set("itbisRate",Number(e.target.value)/100)}/></Field><Field label="Inversor" wide><input className="field" list="tenant-inverters" value={inputs.inverter} onChange={e=>set("inverter",e.target.value)} placeholder="Selecciona del inventario o escribe una especificación"/><datalist id="tenant-inverters">{inventory.filter(item=>item.type==="INVERTER").map(item=><option key={item.id} value={equipmentLabel(item)}>{item.quantity} disponibles</option>)}</datalist><p className="mt-1 text-[11px] text-slate-500">No se asigna automáticamente. Puedes elegir un inversor activo del inventario o escribir cualquier modelo manualmente.</p></Field>{inputs.systemType!=="On-Grid"&&<Field label="Batería" wide><input className="field" list="tenant-batteries" value={inputs.battery} onChange={e=>set("battery",e.target.value)} placeholder="Selecciona del inventario o escribe la batería"/><datalist id="tenant-batteries">{inventory.filter(item=>item.type==="BATTERY").map(item=><option key={item.id} value={equipmentLabel(item)}>{item.quantity} disponibles</option>)}</datalist></Field>}</CardContent></Card></div>
 
-      <div className="space-y-6"><Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Consumo facturado (kWh)</CardTitle><div className="flex items-center gap-2"><select className="h-8 rounded-md border bg-white px-2 text-xs" value={averageCount} onChange={e=>setAverageCount(Number(e.target.value))}>{[3,6,9,12].map(v=><option key={v} value={v}>Últimos {v}</option>)}</select><button onClick={()=>setUseAverage(v=>!v)} className={`h-8 rounded-md px-3 text-xs font-semibold ${useAverage?"bg-primary text-white":"border bg-white"}`}>Promediar</button></div></CardHeader><CardContent><div className="grid grid-cols-3 gap-3 sm:grid-cols-4">{MONTHS.map((month,index)=><Field key={month} label={month.slice(0,3)}><input type="number" min="0" className="field text-right" value={consumption[index]||""} onChange={e=>{const kwh=Number(e.target.value);setConsumption(old=>old.map((v,i)=>i===index?kwh:v));setBilledRecords(old=>{const next=old.filter(item=>item.month!==index+1);return kwh>0?[...next,{month:index+1,year:new Date().getFullYear(),kwh}]:next})}}/></Field>)}</div>{useAverage&&<div className="mt-4 flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-5 text-sky-800"><Info size={16} className="mt-0.5 shrink-0"/>El cálculo usa los últimos {averageCount} registros realmente facturados, ordenados por año y mes desde el más reciente; no usa meses vacíos ni el mes base repetido.</div>}</CardContent></Card>
+      <div className="space-y-6"><Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Consumo facturado (kWh)</CardTitle><div className="flex items-center gap-2"><select className="h-8 rounded-md border bg-white px-2 text-xs" value={averageCount} onChange={e=>setAverageCount(Number(e.target.value))}>{Array.from({length:12},(_,index)=>index+1).map(v=><option key={v} value={v}>Últimos {v} facturados</option>)}</select><button onClick={()=>setUseAverage(v=>!v)} className={`h-8 rounded-md px-3 text-xs font-semibold ${useAverage?"bg-primary text-white":"border bg-white"}`}>Promediar</button></div></CardHeader><CardContent><div className="grid grid-cols-3 gap-3 sm:grid-cols-4">{MONTHS.map((month,index)=><Field key={month} label={month.slice(0,3)}><input type="number" min="0" className="field text-right" value={consumption[index]||""} onChange={e=>{const kwh=Number(e.target.value);setConsumption(old=>old.map((v,i)=>i===index?kwh:v));setBilledRecords(old=>{const next=old.filter(item=>item.month!==index+1);return kwh>0?[...next,{month:index+1,year:new Date().getFullYear(),kwh}]:next})}}/></Field>)}</div>{useAverage&&<div className="mt-4 flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-5 text-sky-800"><Info size={16} className="mt-0.5 shrink-0"/>El cálculo usa {averagedPeriods.length} período(s) realmente facturado(s): {averagedPeriods.map(record=>`${MONTHS[record.month-1].slice(0,3)} ${record.year}`).join(", ")||"ninguno"}. No toma automáticamente los últimos meses del calendario.</div>}</CardContent></Card>
       {result&&<><div className="rounded-xl border border-primary/20 bg-primary/[.06] p-4 text-sm font-medium text-slate-700"><span className="mr-2 inline-flex rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white"><Calculator size={13} className="mr-1"/>Análisis</span>Según el promedio de <strong>{number.format(result.averageMonthlyConsumption)} kWh</strong>, el consumo requiere teóricamente <strong>{result.theoreticalPanelCount} paneles de {inputs.panelWatts} W</strong> para el 100% de cobertura.</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Sistema instalado" value={`${result.installedKwp.toFixed(2)} kWp`}/><Metric label="Paneles" value={String(result.panelCount)}/><Metric label="Cobertura" value={`${result.coveragePercent.toFixed(1)}%`}/><Metric label="Inversión" value={money.format(result.totalUsd)}/></div></>}
       </div>
     </div>

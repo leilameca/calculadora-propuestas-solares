@@ -93,11 +93,12 @@ export interface SolarCalculationResult {
 }
 
 export function latestBilledAverage(records: BilledConsumption[], count: number): number {
-  const recent = records
+  const sorted = records
     .filter((r) => Number.isFinite(r.kwh) && r.kwh > 0)
     .map((r) => ({ ...r, month: Number(r.month), year: Number(r.year) }))
-    .sort((a, b) => (b.year - a.year) || (b.month - a.month))
-    .slice(0, 12);
+    .filter((r) => r.month >= 1 && r.month <= 12 && Number.isInteger(r.year))
+    .sort((a, b) => (b.year - a.year) || (b.month - a.month));
+  const recent = [...new Map(sorted.map((record) => [`${record.year}-${record.month}`, record])).values()].slice(0, 12);
 
   const windowSize = Math.min(Math.max(1, count), recent.length);
   const window = recent.slice(0, windowSize);

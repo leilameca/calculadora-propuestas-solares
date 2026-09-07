@@ -51,5 +51,16 @@ describe("solar calculator", () => {
       { month: 8, year: 2025, kwh: 180 },
     ];
     expect(latestBilledAverage(records, 3)).toBe(280);
+    expect(latestBilledAverage(records, 4)).toBe(287.5);
+  });
+
+  it("ignora meses repetidos al formar la ventana de facturación", () => {
+    const records = [
+      { month: 2, year: 2026, kwh: 300 },
+      { month: 2, year: 2026, kwh: 300 },
+      { month: 1, year: 2026, kwh: 200 },
+      { month: 12, year: 2025, kwh: 100 },
+    ];
+    expect(latestBilledAverage(records, 3)).toBe(200);
   });
 });
