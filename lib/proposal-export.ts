@@ -12,7 +12,7 @@ export async function loadSavedProposalForExport(proposalId:string,companyId:str
   return {
     company:{name:String(company.name),rnc:company.rnc,address:company.address,phone:company.phone,email:company.email,website:company.website,slogan:company.slogan,primaryColor:String(company.primaryColor||"#0F4C5C"),secondaryColor:String(company.secondaryColor||"#2F7D32"),accentColor:String(company.accentColor||"#F2A900"),proposalValidityDays:Number(company.proposalValidityDays)||15,itbisEnabled:company.itbisEnabled!==false,logoBase64:company.logoUrl,coverImageBase64:proposal.projectImageUrl||company.coverImageUrl||coverImages[0],backCoverImageBase64:company.backCoverImageUrl||coverImages[1]||coverImages[0],itbisRate:company.itbisRate==null?undefined:Number(company.itbisRate)},
     customer:{name:String(customer.name),nic:customer.nic,address:customer.address,logoBase64:customer.logoUrl},
-    project:{name:String(proposal.projectName),city:String(proposal.city),utility:String(proposal.utility),tariff:String(proposal.tariff),systemType:String(proposal.systemType),panelWatts:Number(input.panelWatts)||0,inverter:String(input.inverter||proposal.manualInverter||"Por seleccionar")},
+    project:{name:String(proposal.projectName),city:String(proposal.city),utility:String(proposal.utility),tariff:String(proposal.tariff),systemType:String(proposal.systemType),panelWatts:Number(input.panelWatts)||0,inverter:String(input.inverter||proposal.manualInverter||"Por seleccionar"),exchangeRate:Number(proposal.exchangeRate)||0},
     consumption:Array.isArray(proposal.monthlyConsumption)?proposal.monthlyConsumption.map(Number):[],
     result:proposal.calculationResult,
     quoteItems:Array.isArray(proposal.quoteItems)?proposal.quoteItems:[],

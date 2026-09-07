@@ -16,7 +16,7 @@ const white = "FFFFFF", ink = "172033", gray = "F3F4F6", muted = "64748B";
 export interface ProposalDocumentInput {
   company: { name:string; rnc?:string; address?:string; phone?:string; email?:string; website?:string; slogan?:string; logoBase64?:string; coverImageBase64?:string; backCoverImageBase64?:string; primaryColor:string; secondaryColor:string; accentColor:string; proposalValidityDays?:number; itbisEnabled?:boolean; itbisRate?:number };
   customer: { name:string; nic?:string; address?:string; logoBase64?:string };
-  project: { name:string; city:string; utility:string; tariff:string; systemType:string; panelWatts:number; inverter?:string };
+  project: { name:string; city:string; utility:string; tariff:string; systemType:string; panelWatts:number; inverter?:string; exchangeRate?:number };
   consumption: number[];
   result: SolarCalculationResult;
   quoteItems: Array<{ name:string; description?:string; quantity?:number; amountUsd:number }>;
@@ -104,6 +104,8 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   const quoteSubtotal=input.quoteItems.reduce((sum,item)=>sum+item.amountUsd,0);
   const quoteTax=input.company.itbisEnabled===false?0:(input.company.itbisRate||0.18)*quoteSubtotal;
   const quoteTotal=quoteSubtotal+quoteTax;
+  const quoteTotalDop=quoteTotal*(input.project.exchangeRate||0);
+  const quotePricePerKwp=input.result.installedKwp>0?quoteTotal/input.result.installedKwp:0;
   const children:(Paragraph|Table)[]=[];
 
   // 1. Portada - proposal_centerpiece adapted to dynamic brand identity.
@@ -122,7 +124,7 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   input.quoteItems.forEach((item,index)=>quoteRows.push(new TableRow({children:[cell([p(item.name,{bold:true,size:17})],quoteWidths[0],{fill:index%2?gray:white}),cell([p(item.description||"Incluido",{size:17})],quoteWidths[1],{fill:index%2?gray:white}),cell([p(item.amountUsd===0?"INCLUIDO":usd(item.amountUsd),{bold:true,size:17,align:AlignmentType.RIGHT,color:item.amountUsd===0?secondary:ink})],quoteWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
   quoteRows.push(new TableRow({children:[cell([p("SUB-TOTAL",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(quoteSubtotal),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
   if(quoteTax>0)quoteRows.push(new TableRow({children:[cell([p(`ITBIS ${input.company.itbisRate?`(${(input.company.itbisRate*100).toFixed(2)}%)`:""}`.trim(),{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quoteTax),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
-  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("PRECIO POR kWp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(input.result.pricePerWpUsd*1000),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
+  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("EQUIVALENTE EN RD$",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(`RD$ ${Math.round(quoteTotalDop).toLocaleString("es-DO")}`,{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}),new TableRow({children:[cell([p("PRECIO POR kWp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quotePricePerKwp),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
   children.push(table(quoteRows,quoteWidths,{borderColor:primary}));
 
   // 4. Análisis.

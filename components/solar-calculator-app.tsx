@@ -170,12 +170,17 @@ export function SolarCalculatorApp() {
   function proposalPayload() {
     if (!result) return null;
     const selectedInverter=inventory.find((item)=>item.type==="INVERTER"&&equipmentLabel(item)===inputs.inverter),selectedBattery=inventory.find((item)=>item.type==="BATTERY"&&equipmentLabel(item)===inputs.battery);
-    return { company:{...company,logoBase64:company.logoUrl,coverImageBase64:projectImage||company.coverImageUrl||company.coverImages?.[0],backCoverImageBase64:company.backCoverImageUrl||company.coverImages?.[1]||company.coverImages?.[0],itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate}, customer:{name:inputs.client||"Cliente de demostración",nic:inputs.nic||"N/D",address:inputs.address||inputs.city,logoBase64:customerLogo||undefined}, project:{name:"Sistema Solar Fotovoltaico",city:inputs.city,utility:inputs.utility,tariff:inputs.tariff,systemType:inputs.systemType,panelWatts:inputs.panelWatts,inverter:inputs.inverter||"Por seleccionar"},consumption:effectiveConsumption,result,quoteItems:quoteItems(),proposalText,invoice:invoice||undefined,selectedEquipmentIds:[inputs.panelEquipmentId,selectedInverter?.id,selectedBattery?.id].filter((id):id is string=>Boolean(id))};
+    return { company:{...company,logoBase64:company.logoUrl,coverImageBase64:projectImage||company.coverImageUrl||company.coverImages?.[0],backCoverImageBase64:company.backCoverImageUrl||company.coverImages?.[1]||company.coverImages?.[0],itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate}, customer:{name:inputs.client||"Cliente de demostración",nic:inputs.nic||"N/D",address:inputs.address||inputs.city,logoBase64:customerLogo||undefined}, project:{name:"Sistema Solar Fotovoltaico",city:inputs.city,utility:inputs.utility,tariff:inputs.tariff,systemType:inputs.systemType,panelWatts:inputs.panelWatts,inverter:inputs.inverter||"Por seleccionar",exchangeRate:inputs.exchangeRate},consumption:effectiveConsumption,result,quoteItems:quoteItems(),proposalText,invoice:invoice||undefined,selectedEquipmentIds:[inputs.panelEquipmentId,selectedInverter?.id,selectedBattery?.id].filter((id):id is string=>Boolean(id))};
   }
   async function exportProposal(format:"docx"|"pdf") {
     if (!result) return;
     setExporting(format);
     try {
+      if (editingId) {
+        const response = await fetch(`/api/proposals/${format}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({proposalId:editingId})});
+        if (!response.ok) throw new Error(await response.text());
+        const blob=await response.blob(); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url;a.download=`${(editingNumber||"propuesta").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.${format}`;a.click();URL.revokeObjectURL(url); return;
+      }
       const fullPayload = proposalPayload();
       if (!fullPayload) return;
       let payload = fullPayload;
