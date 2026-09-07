@@ -22,12 +22,24 @@ const fallback: CompanyForm = {
   backCoverImageUrl: "", coverImages: [],
 };
 
-function imageToDataUrl(file: File): Promise<string> {
+function imageToDataUrl(file: File, options: { maxWidth: number; maxHeight: number; outputType: "image/jpeg" | "image/png" }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, options.maxWidth / image.naturalWidth, options.maxHeight / image.naturalHeight);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) { URL.revokeObjectURL(url); reject(new Error("No se pudo procesar la imagen.")); return; }
+      if (options.outputType === "image/jpeg") { context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height); }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL(options.outputType, 0.82));
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("La imagen no es válida.")); };
+    image.src = url;
   });
 }
 
@@ -52,9 +64,9 @@ export function CompanyProfileForm() {
   }
 
   async function addImages(files: FileList | null) {
-    const selected = Array.from(files || []);
+    const selected = Array.from(files || []).slice(0, Math.max(0, 8 - form.coverImages.length));
     if (!selected.length) return;
-    const images = await Promise.all(selected.map(imageToDataUrl));
+    const images = await Promise.all(selected.map((file) => imageToDataUrl(file, { maxWidth: 1600, maxHeight: 1000, outputType: "image/jpeg" })));
     setForm((current) => ({ ...current, coverImages: [...current.coverImages, ...images],
       coverImageUrl: current.coverImageUrl || images[0],
       backCoverImageUrl: current.backCoverImageUrl || images.at(-1) || images[0],
@@ -88,7 +100,7 @@ export function CompanyProfileForm() {
         <label><span className="label">Vigencia de propuesta (días)</span><input className="field text-right" type="number" min="1" max="365" value={form.proposalValidityDays} onChange={(event) => set("proposalValidityDays", Number(event.target.value))} /></label>
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Biblioteca de portadas</CardTitle></CardHeader><CardContent>
-        <label className="flex h-28 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-semibold text-slate-500 hover:bg-slate-50"><ImagePlus size={18} />Agregar fotos JPG o PNG<input type="file" multiple className="hidden" accept="image/png,image/jpeg" onChange={(event) => void addImages(event.target.files)} /></label>
+        <label className="flex h-28 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-semibold text-slate-500 hover:bg-slate-50"><ImagePlus size={18} />Agregar fotos JPG o PNG<input type="file" multiple className="hidden" accept="image/png,image/jpeg" onChange={(event) => void addImages(event.target.files)} /></label><p className="mt-2 text-xs text-slate-500">Hasta 8 imágenes optimizadas automáticamente para portada y contraportada.</p>
         {form.coverImages.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{form.coverImages.map((image, index) => <div key={`${image.slice(0, 40)}-${index}`} className="overflow-hidden rounded-lg border bg-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}<img src={image} alt={`Proyecto ${index + 1}`} className="h-32 w-full object-cover" />
           <div className="grid grid-cols-[1fr_1fr_auto] gap-1 p-2"><button type="button" onClick={() => set("coverImageUrl", image)} className={`rounded px-2 py-1 text-xs font-semibold ${form.coverImageUrl === image ? "bg-primary text-white" : "bg-slate-100 text-slate-600"}`}>{form.coverImageUrl === image && <Check className="mr-1 inline" size={12} />}Portada</button><button type="button" onClick={() => set("backCoverImageUrl", image)} className={`rounded px-2 py-1 text-xs font-semibold ${form.backCoverImageUrl === image ? "bg-secondary text-white" : "bg-slate-100 text-slate-600"}`}>{form.backCoverImageUrl === image && <Check className="mr-1 inline" size={12} />}Cierre</button><button type="button" onClick={() => removeImage(image)} className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label="Eliminar imagen"><Trash2 size={15} /></button></div>
@@ -98,7 +110,7 @@ export function CompanyProfileForm() {
     <div className="space-y-6">
       <Card><CardHeader><CardTitle>Identidad visual</CardTitle></CardHeader><CardContent className="space-y-4">
         {(["primaryColor", "secondaryColor", "accentColor"] as const).map((key) => <label key={key} className="flex items-center justify-between gap-4"><span className="text-sm font-medium">{{ primaryColor: "Primario", secondaryColor: "Secundario", accentColor: "Acento" }[key]}</span><span className="flex items-center gap-2"><input type="color" value={form[key]} onChange={(event) => set(key, event.target.value)} /><input className="field w-28" value={form[key]} onChange={(event) => set(key, event.target.value)} /></span></label>)}
-        <label className="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-semibold text-slate-500 hover:bg-slate-50"><ImagePlus size={18} />{form.logoUrl ? "Cambiar logo" : "Cargar logo"}<input type="file" className="hidden" accept="image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0]; if (file) void imageToDataUrl(file).then((value) => set("logoUrl", value)); }} /></label>
+        <label className="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-semibold text-slate-500 hover:bg-slate-50"><ImagePlus size={18} />{form.logoUrl ? "Cambiar logo" : "Cargar logo"}<input type="file" className="hidden" accept="image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0]; if (file) void imageToDataUrl(file, { maxWidth: 800, maxHeight: 400, outputType: "image/png" }).then((value) => set("logoUrl", value)); }} /></label>
         {form.logoUrl && <div className="rounded-lg border bg-slate-50 p-3">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={form.logoUrl} alt="Logo institucional" className="mx-auto max-h-20 max-w-full object-contain" /></div>}
       </CardContent></Card>
       <Card><CardHeader><CardTitle>ITBIS y fiscalización</CardTitle></CardHeader><CardContent className="space-y-4"><label className="flex items-center justify-between gap-4"><span className="text-sm font-medium">Aplicar ITBIS</span><input type="checkbox" checked={form.itbisEnabled} onChange={(event) => set("itbisEnabled", event.target.checked)} className="h-4 w-4" /></label><label><span className="label">Tasa ITBIS (%)</span><input className="field text-right" type="number" min="0" max="100" step="0.01" disabled={!form.itbisEnabled} value={form.itbisRate * 100} onChange={(event) => set("itbisRate", Number(event.target.value) / 100)} /></label></CardContent></Card>

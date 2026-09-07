@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const proposal = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const company = await tx.company.findUnique({ where: { id: session.companyId! }, select: { proposalValidityDays: true } });
       // Buscar o crear el cliente por NIC dentro del tenant
       let customer = body.customerNic
         ? await tx.customer.findUnique({ where: { companyId_nic: { companyId: session.companyId!, nic: String(body.customerNic) } } })
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
           subtotalUsd: body.subtotalUsd ?? 0,
           taxUsd: body.taxUsd ?? 0,
           totalUsd: body.totalUsd ?? 0,
-          validUntil: body.validUntil ? new Date(body.validUntil) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+          validUntil: body.validUntil ? new Date(body.validUntil) : new Date(Date.now() + (company?.proposalValidityDays || 15) * 24 * 60 * 60 * 1000),
           notes: body.notes || null,
         },
       });

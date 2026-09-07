@@ -21,6 +21,8 @@ export interface ProposalDocumentInput {
   quoteItems: Array<{ name:string; description?:string; quantity?:number; amountUsd:number }>;
   proposalNumber?: string;
   date?: string;
+  selectedEquipmentIds?: string[];
+  attachments?: Array<{ equipmentName:string; kind:"DATASHEET"|"CERTIFICATE"; fileName:string; mimeType:string; dataUrl:string }>;
 }
 
 const cleanHex = (value:string|undefined,fallback:string) => (value||"").replace("#","").match(/^[0-9A-Fa-f]{6}$/)?.[0].toUpperCase() || fallback;
@@ -76,7 +78,7 @@ async function chartImage(input:ProposalDocumentInput,primary:string,accent:stri
   const bars=MONTHS.map((month,index)=>{const x=padX+index*group+group*.14,solar=input.result.monthlyGeneration[index]/max*chartHeight,consumption=input.consumption[index]/max*chartHeight;return `<rect x="${x}" y="${padTop+chartHeight-solar}" width="${bar}" height="${solar}" rx="3" fill="#${primary}"/><rect x="${x+bar+5}" y="${padTop+chartHeight-consumption}" width="${bar}" height="${consumption}" rx="3" fill="#${accent}"/><text x="${x+bar}" y="${height-24}" text-anchor="middle" font-family="Arial" font-size="16" fill="#64748B">${month.slice(0,3).toUpperCase()}</text>`;}).join("");
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#FFFFFF"/><text x="${padX}" y="32" font-family="Arial" font-size="22" font-weight="700" fill="#172033">GENERACIÓN VS. CONSUMO - KWH / MES</text><rect x="${width-360}" y="19" width="16" height="16" rx="3" fill="#${primary}"/><text x="${width-336}" y="33" font-family="Arial" font-size="16" fill="#64748B">Generación</text><rect x="${width-185}" y="19" width="16" height="16" rx="3" fill="#${accent}"/><text x="${width-161}" y="33" font-family="Arial" font-size="16" fill="#64748B">Consumo</text>${grid}${bars}</svg>`;
   const png=await sharp(Buffer.from(svg)).png().toBuffer();
-  return new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:120},children:[new ImageRun({data:png,type:"png",transformation:{width:622,height:215}})]});
+  return new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:20},children:[new ImageRun({data:png,type:"png",transformation:{width:622,height:120}})]});
 }
 
 export async function buildProposalDocument(input:ProposalDocumentInput): Promise<Document> {
@@ -105,7 +107,7 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   children.push(table(quoteRows,quoteWidths,{borderColor:primary}));
 
   // 4. Análisis.
-  children.push(pageBreak(),sectionHeading(3,"Análisis de consumo y producción",primary,secondary),table([new TableRow({children:[metricCard("Ahorro anual",dop(input.result.annualSavingsDop),Math.floor(CONTENT_WIDTH/3),primary,white),metricCard("Generación anual",`${num(input.result.annualGeneration)} kWh`,Math.floor(CONTENT_WIDTH/3),secondary,white),metricCard("CO2 evitado",`${input.result.co2AvoidedTons.toFixed(2)} t`,CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3),accent,ink)]})],[Math.floor(CONTENT_WIDTH/3),Math.floor(CONTENT_WIDTH/3),CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3)]),empty(100),await chartImage(input,primary,accent));
+  children.push(pageBreak(),sectionHeading(3,"Análisis de consumo y producción",primary,secondary),table([new TableRow({children:[metricCard("Ahorro anual",dop(input.result.annualSavingsDop),Math.floor(CONTENT_WIDTH/3),primary,white),metricCard("Generación anual",`${num(input.result.annualGeneration)} kWh`,Math.floor(CONTENT_WIDTH/3),secondary,white),metricCard("CO2 evitado",`${input.result.co2AvoidedTons.toFixed(2)} t`,CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3),accent,ink)]})],[Math.floor(CONTENT_WIDTH/3),Math.floor(CONTENT_WIDTH/3),CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3)]),empty(20),await chartImage(input,primary,accent));
   const analysisWidths=[Math.round(CONTENT_WIDTH*.22),Math.round(CONTENT_WIDTH*.29),Math.round(CONTENT_WIDTH*.29),Math.round(CONTENT_WIDTH*.2)];
   const analysisRows=[new TableRow({tableHeader:true,children:["MES","CONSUMO KWh","GENERACIÓN KWh","COBERTURA"].map((label,i)=>cell([p(label,{bold:true,color:white,size:16,align:i?AlignmentType.RIGHT:AlignmentType.LEFT})],analysisWidths[i],{fill:primary,align:i?AlignmentType.RIGHT:AlignmentType.LEFT,borderColor:primary}))})];
   MONTHS.forEach((month,index)=>analysisRows.push(new TableRow({children:[cell([p(month,{size:16})],analysisWidths[0],{fill:index%2?gray:white}),cell([p(num(input.consumption[index]),{size:16,align:AlignmentType.RIGHT})],analysisWidths[1],{fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(num(input.result.monthlyGeneration[index]),{size:16,align:AlignmentType.RIGHT})],analysisWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(`${input.result.monthlyCoverage[index].toFixed(1)}%`,{bold:true,size:16,align:AlignmentType.RIGHT,color:input.result.monthlyCoverage[index]>=100?secondary:ink})],analysisWidths[3],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));

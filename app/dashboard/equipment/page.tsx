@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Boxes, Loader2, Plus } from "lucide-react";
+import { Boxes, FileCheck2, FileText, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -16,6 +16,8 @@ type Equipment = {
   unitCostUsd: string;
   quantity: number;
   warrantyYears?: number | null;
+  datasheetName?: string | null;
+  certificateName?: string | null;
   active: boolean;
 };
 
@@ -37,6 +39,8 @@ export default function EquipmentPage() {
   const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [datasheet, setDatasheet] = useState<File | null>(null);
+  const [certificate, setCertificate] = useState<File | null>(null);
 
   async function load() {
     setLoading(true);
@@ -49,6 +53,7 @@ export default function EquipmentPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if ([datasheet, certificate].some((file) => file && file.size > 4 * 1024 * 1024)) { setMessage("Cada documento debe pesar 4 MB o menos."); return; }
     setSaving(true);
     setMessage("");
     const body = {
@@ -68,9 +73,16 @@ export default function EquipmentPage() {
       body: JSON.stringify(body),
     });
     const data = await response.json();
+    if (!response.ok) { setSaving(false); setMessage(data.error || "No se pudo guardar el equipo."); return; }
+    for (const [kind, file] of [["datasheet", datasheet], ["certificate", certificate]] as const) {
+      if (!file) continue;
+      const documents = new FormData(); documents.append("kind", kind); documents.append("file", file);
+      const uploaded = await fetch(`/api/equipment/${data.id}/documents`, { method: "POST", body: documents });
+      if (!uploaded.ok) { const error = await uploaded.json(); setSaving(false); setMessage(`El equipo se creó, pero no se pudo guardar ${kind === "datasheet" ? "el datasheet" : "el certificado"}: ${error.error}`); await load(); return; }
+    }
     setSaving(false);
-    if (!response.ok) { setMessage(data.error || "No se pudo guardar el equipo."); return; }
     setForm(emptyForm);
+    setDatasheet(null); setCertificate(null);
     setShowForm(false);
     setMessage("Equipo agregado al inventario.");
     await load();
@@ -101,6 +113,8 @@ export default function EquipmentPage() {
               <label><span className="label">Existencia</span><input className="field" type="number" min="0" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} /></label>
               <label><span className="label">Garantía (años)</span><input className="field" type="number" min="0" value={form.warrantyYears} onChange={(e) => setForm({ ...form, warrantyYears: e.target.value })} /></label>
               <label className="sm:col-span-2 lg:col-span-3"><span className="label">Descripción</span><input className="field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+              <label className="sm:col-span-1"><span className="label">Datasheet (opcional)</span><input className="field file:mr-3 file:border-0 file:bg-transparent file:font-semibold" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setDatasheet(e.target.files?.[0] || null)} /><span className="mt-1 block text-xs text-slate-500">PDF, PNG o JPG · máximo 4 MB</span></label>
+              <label className="sm:col-span-1"><span className="label">Certificado (opcional)</span><input className="field file:mr-3 file:border-0 file:bg-transparent file:font-semibold" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setCertificate(e.target.files?.[0] || null)} /><span className="mt-1 block text-xs text-slate-500">PDF, PNG o JPG · máximo 4 MB</span></label>
               {message && <p className="text-sm font-medium text-primary sm:col-span-2 lg:col-span-3">{message}</p>}
               <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
                 <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}Guardar equipo</Button>
@@ -127,7 +141,7 @@ export default function EquipmentPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-slate-500">
-                    {["Tipo", "Marca", "Modelo", "Potencia", "Capacidad", "Costo USD", "Existencia", "Garantía"].map((h) => <th key={h} className="px-3 py-3">{h}</th>)}
+                    {["Tipo", "Marca", "Modelo", "Potencia", "Capacidad", "Costo USD", "Existencia", "Garantía", "Documentos"].map((h) => <th key={h} className="px-3 py-3">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -141,6 +155,7 @@ export default function EquipmentPage() {
                       <td className="px-3 py-4 font-semibold">US$ {Number(item.unitCostUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                       <td className="px-3 py-4 text-center">{item.quantity}</td>
                       <td className="px-3 py-4 text-slate-500">{item.warrantyYears ? `${item.warrantyYears} años` : "—"}</td>
+                      <td className="px-3 py-4"><div className="flex min-w-28 flex-col gap-1 text-xs">{item.datasheetName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.datasheetName}><FileText size={14}/>Datasheet</span>:<span className="text-slate-400">Sin datasheet</span>}{item.certificateName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.certificateName}><FileCheck2 size={14}/>Certificado</span>:<span className="text-slate-400">Sin certificado</span>}</div></td>
                     </tr>
                   ))}
                 </tbody>

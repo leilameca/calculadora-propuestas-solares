@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Packer } from "docx";
 import { buildProposalDocument, type ProposalDocumentInput } from "@/lib/docx-builder";
+import { sessionFromRequest } from "@/lib/auth";
+import { addTenantEquipmentAttachments } from "@/lib/equipment-attachments";
 
 export const runtime = "nodejs";
 
 export async function POST(request:NextRequest){
   try{
-    const payload=await request.json() as ProposalDocumentInput;
+    const session=await sessionFromRequest(request);if(!session?.companyId)return NextResponse.json({error:"No autorizado"},{status:401});
+    const payload=await addTenantEquipmentAttachments(await request.json() as ProposalDocumentInput,session.companyId);
     const document=await buildProposalDocument(payload);
     const buffer=await Packer.toBuffer(document);
     return new NextResponse(new Uint8Array(buffer),{status:200,headers:{"Content-Type":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","Content-Disposition":`attachment; filename="propuesta-solar.docx"`}});

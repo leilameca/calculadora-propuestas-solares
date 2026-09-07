@@ -4,6 +4,7 @@ import { GetDocumentTextDetectionCommand, StartDocumentTextDetectionCommand, Tex
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { parseElectricInvoice } from "@/lib/ocr";
 import { extractEmbeddedPdfText } from "@/lib/pdf-text";
+import { sessionFromRequest } from "@/lib/auth";
 export const runtime="nodejs"; export const maxDuration=60;
 async function recognizeImage(bytes:Uint8Array){ const worker=await createWorker("spa"); try{ return (await worker.recognize(Buffer.from(bytes))).data.text; } finally { await worker.terminate(); } }
 async function recognizePdf(bytes:Uint8Array,fileName:string){
@@ -22,4 +23,4 @@ async function recognizePdf(bytes:Uint8Array,fileName:string){
     await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:key})).catch(()=>undefined);
   }
 }
-export async function POST(request:NextRequest){ try{ const form=await request.formData(),file=form.get("file"); if(!(file instanceof File)) return NextResponse.json({error:"Adjunte una factura."},{status:400}); if(file.size>10*1024*1024) return NextResponse.json({error:"El archivo excede 10 MB."},{status:413}); const bytes=new Uint8Array(await file.arrayBuffer()); const text=file.type==="application/pdf"?await recognizePdf(bytes,file.name):await recognizeImage(bytes); return NextResponse.json(parseElectricInvoice(text)); }catch(error){ return NextResponse.json({error:error instanceof Error?error.message:"OCR no disponible"},{status:422}); } }
+export async function POST(request:NextRequest){ try{ const session=await sessionFromRequest(request);if(!session?.companyId)return NextResponse.json({error:"No autorizado"},{status:401});const form=await request.formData(),file=form.get("file"); if(!(file instanceof File)) return NextResponse.json({error:"Adjunte una factura."},{status:400}); if(file.size>10*1024*1024) return NextResponse.json({error:"El archivo excede 10 MB."},{status:413}); if(file.type!=="application/pdf"&&!file.type.startsWith("image/"))return NextResponse.json({error:"Formato no admitido. Use PDF, PNG o JPG."},{status:415}); const bytes=new Uint8Array(await file.arrayBuffer()); const text=file.type==="application/pdf"?await recognizePdf(bytes,file.name):await recognizeImage(bytes); return NextResponse.json(parseElectricInvoice(text)); }catch(error){ return NextResponse.json({error:error instanceof Error?error.message:"OCR no disponible"},{status:422}); } }

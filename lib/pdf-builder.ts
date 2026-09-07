@@ -1,4 +1,4 @@
-import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb, type RGB } from "pdf-lib";
+import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb, type PDFImage, type RGB } from "pdf-lib";
 import { MONTHS } from "./solar-calculator";
 import type { ProposalDocumentInput } from "./docx-builder";
 
@@ -58,8 +58,15 @@ async function embedDataImage(pdf: PDFDocument, dataUrl?: string) {
   return match[1].toLowerCase() === "png" ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
 }
 
-function header(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, pageNumber: number) {
-  page.drawText(input.company.name, { x: MARGIN, y: PAGE_H - 43, size: 10, font: fonts.bold, color: brand.primary });
+function drawLogoOrName(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, logo?: PDFImage | null) {
+  if (logo) {
+    const size = logo.scaleToFit(105, 28);
+    page.drawImage(logo, { x: MARGIN, y: PAGE_H - 52, width: size.width, height: size.height });
+  } else page.drawText(input.company.name, { x: MARGIN, y: PAGE_H - 43, size: 10, font: fonts.bold, color: brand.primary });
+}
+
+function header(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, pageNumber: number, logo?: PDFImage | null) {
+  drawLogoOrName(page, input, fonts, brand, logo);
   const contact = [input.company.phone, input.company.email].filter(Boolean).join("  |  ");
   const contactWidth = fonts.regular.widthOfTextAtSize(contact, 8);
   page.drawText(contact, { x: Math.max(MARGIN, PAGE_W - MARGIN - contactWidth), y: PAGE_H - 43, size: 8, font: fonts.regular, color: MUTED });
@@ -110,6 +117,43 @@ function drawChart(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, br
   });
 }
 
+function attachmentBytes(dataUrl: string): Uint8Array {
+  const encoded = dataUrl.split(",", 2)[1];
+  if (!encoded) throw new Error("Documento adjunto inválido.");
+  return new Uint8Array(Buffer.from(encoded, "base64"));
+}
+
+async function appendEquipmentAttachments(pdf: PDFDocument, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, logo?: PDFImage | null) {
+  if (!input.attachments?.length) return;
+  let annexPage = pdf.addPage([PAGE_W, PAGE_H]);
+  header(annexPage, input, fonts, brand, 9, logo);
+  title(annexPage, 7, "Anexos Técnicos de Equipos", fonts, brand);
+  paragraph(annexPage, "Los siguientes datasheets y certificados corresponden a los equipos seleccionados para esta propuesta.", MARGIN, 615, { font: fonts.regular, size: 11, width: CONTENT_W, lineHeight: 16 });
+  let annexY = 555;
+  for (const attachment of input.attachments) {
+    annexPage.drawRectangle({ x: MARGIN, y: annexY - 38, width: CONTENT_W, height: 48, color: LIGHT });
+    annexPage.drawText(attachment.kind === "DATASHEET" ? "DATASHEET" : "CERTIFICADO", { x: MARGIN + 14, y: annexY - 10, size: 8, font: fonts.bold, color: brand.primary });
+    annexPage.drawText(fitText(`${attachment.equipmentName} · ${attachment.fileName}`, fonts.regular, 9.5, CONTENT_W - 28), { x: MARGIN + 14, y: annexY - 27, size: 9.5, font: fonts.regular, color: INK });
+    annexY -= 60;
+  }
+  footer(annexPage, input, fonts, brand, 9);
+
+  for (const attachment of input.attachments) {
+    const bytes = attachmentBytes(attachment.dataUrl);
+    if (attachment.mimeType === "application/pdf") {
+      const source = await PDFDocument.load(bytes);
+      const copied = await pdf.copyPages(source, source.getPageIndices());
+      copied.forEach((sourcePage) => pdf.addPage(sourcePage));
+      continue;
+    }
+    annexPage = pdf.addPage([PAGE_W, PAGE_H]);
+    const image = attachment.mimeType === "image/png" ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+    const size = image.scaleToFit(CONTENT_W, 625);
+    annexPage.drawText(`${attachment.kind === "DATASHEET" ? "DATASHEET" : "CERTIFICADO"} · ${attachment.equipmentName}`, { x: MARGIN, y: 742, size: 12, font: fonts.bold, color: brand.primary });
+    annexPage.drawImage(image, { x: MARGIN + (CONTENT_W - size.width) / 2, y: 80 + (625 - size.height) / 2, width: size.width, height: size.height });
+  }
+}
+
 export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Uint8Array> {
   if (input.consumption.length !== 12) throw new Error("La propuesta requiere 12 consumos mensuales.");
   const pdf = await PDFDocument.create();
@@ -120,11 +164,12 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   const brand: Brand = { primary: color(input.company.primaryColor, "0F4C5C"), secondary: color(input.company.secondaryColor, "2F7D32"), accent: color(input.company.accentColor, "F2A900") };
   const coverImage = await embedDataImage(pdf, input.company.coverImageBase64);
   const backImage = await embedDataImage(pdf, input.company.backCoverImageBase64 || input.company.coverImageBase64);
+  const logo = await embedDataImage(pdf, input.company.logoBase64);
   const date = input.date || new Intl.DateTimeFormat("es-DO", { dateStyle: "long" }).format(new Date());
 
   // 1. Portada
   let page = pdf.addPage([PAGE_W, PAGE_H]);
-  page.drawText(input.company.name, { x: MARGIN, y: 745, size: 12, font: fonts.bold, color: brand.primary });
+  drawLogoOrName(page, input, fonts, brand, logo);
   const coverContact = [input.company.phone, input.company.email].filter(Boolean).join("  |  ");
   page.drawText(fitText(coverContact, fonts.regular, 8, 220), { x: 321, y: 745, size: 8, font: fonts.regular, color: MUTED });
   if (coverImage) page.drawImage(coverImage, { x: MARGIN, y: 515, width: CONTENT_W, height: 190 });
@@ -142,7 +187,7 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   footer(page, input, fonts, brand, 1);
 
   // 2. Descripción y regulación
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 2); title(page, 1, "Descripción del Proyecto y Objetivos", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 2, logo); title(page, 1, "Descripción del Proyecto y Objetivos", fonts, brand);
   let y = 606;
   y = paragraph(page, `El proyecto plantea una solución de abastecimiento energético para ${input.customer.name}, basada en una generación estimada de ${Math.round(input.result.annualGeneration / 12).toLocaleString("es-DO")} kWh/mes y ${Math.round(input.result.annualGeneration).toLocaleString("es-DO")} kWh/año mediante un sistema solar fotovoltaico de alta eficiencia.`, MARGIN, y, { font: fonts.regular, size: 11, lineHeight: 17 });
   page.drawText("OBJETIVOS DEL PROYECTO", { x: MARGIN, y: y - 20, size: 8, font: fonts.bold, color: MUTED }); y -= 45;
@@ -151,7 +196,7 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   page.drawRectangle({ x: MARGIN, y: 125, width: CONTENT_W, height: 145, borderColor: rgb(.84, .88, .93), borderWidth: 1, color: WHITE }); page.drawText("MARCO REGULATORIO - INYECCIÓN A LA RED", { x: MARGIN + 18, y: 245, size: 9, font: fonts.bold, color: INK }); paragraph(page, "Para clientes en tarifas BTS-1 y BTS-2 de EDENORTE, EDESUR o EDEESTE, la energía inyectada a la red está sujeta al cargo regulatorio aplicable del 25%. La valorización final depende del esquema de medición, los acuerdos de interconexión y la regulación vigente al momento de aprobación.", MARGIN + 18, 221, { font: fonts.regular, size: 9, width: CONTENT_W - 36, lineHeight: 14 });
 
   // 3. Cotización
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 3); title(page, 2, "Inversión y Cotización del Sistema", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 3, logo); title(page, 2, "Inversión y Cotización del Sistema", fonts, brand);
   page.drawRectangle({ x: MARGIN, y: 585, width: CONTENT_W, height: 54, color: brand.primary }); paragraph(page, `Sistema solar de ${input.result.installedKwp.toFixed(2)} kWp > ${Math.round(input.result.annualGeneration / 12).toLocaleString("es-DO")} kWh/mes | ${Math.round(input.result.annualGeneration).toLocaleString("es-DO")} kWh/año`, MARGIN + 18, 614, { font: fonts.bold, size: 10, color: WHITE, width: CONTENT_W - 36, lineHeight: 13 });
   const tableTop = 545, rowH = 32, col1 = 245, col2 = 100, col3 = CONTENT_W - col1 - col2;
   page.drawText("CONCEPTO", { x: MARGIN + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED }); page.drawText("CANT.", { x: MARGIN + col1 + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED }); page.drawText("MONTO USD", { x: MARGIN + col1 + col2 + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED });
@@ -165,7 +210,7 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   paragraph(page, "Equipos sujetos a disponibilidad del fabricante. Todo cambio de alcance debe cotizarse por escrito.", MARGIN, Math.max(88, rowY - 25), { font: fonts.displayItalic, size: 8, color: MUTED });
 
   // 4. Análisis
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 4); title(page, 3, "Análisis de Consumo y Producción Solar", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 4, logo); title(page, 3, "Análisis de Consumo y Producción Solar", fonts, brand);
   metric(page, MARGIN, 545, cardW, 84, `RD$ ${Math.round(input.result.annualSavingsDop).toLocaleString("es-DO")}`, "ahorro anual", fonts, brand.accent, brand.accent);
   metric(page, MARGIN + cardW + gap, 545, cardW, 84, `${Math.round(input.result.annualGeneration).toLocaleString("es-DO")}`, "generación anual kWh", fonts, brand.primary);
   metric(page, MARGIN + (cardW + gap) * 2, 545, cardW, 84, `${input.result.co2AvoidedTons.toFixed(1)} t`, "CO2 evitado / año", fonts, brand.secondary, brand.secondary);
@@ -173,19 +218,19 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   page.drawRectangle({ x: MARGIN, y: 104, width: CONTENT_W, height: 58, color: LIGHT }); paragraph(page, "Importante. La generación estimada depende de las condiciones climáticas, sombras, suciedad, disponibilidad de red y tolerancias de los equipos.", MARGIN + 18, 139, { font: fonts.regular, size: 8.5, width: CONTENT_W - 36, lineHeight: 12 });
 
   // 5. Condiciones generales
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 5); title(page, 4, "Condiciones Generales", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 5, logo); title(page, 4, "Condiciones Generales", fonts, brand);
   const conditions = ["Los pagos se realizan en USD o DOP a la tasa de venta acordada o a la referencia del Banco Central del día.", "Los sistemas On-Grid dejan de producir cuando se interrumpe el suministro eléctrico, salvo que exista respaldo compatible.", "La producción es una estimación de ingeniería basada en consumos, irradiancia, pérdidas y parámetros declarados.", "Equipos sujetos a disponibilidad; cualquier sustitución debe ser técnicamente equivalente o superior.", "Obras civiles, refuerzos de techo, permisos y cargos de terceros se incluyen solo cuando estén descritos."];
   y = 595; conditions.forEach((copy, index) => { const fill = index % 2 ? WHITE : LIGHT; page.drawRectangle({ x: MARGIN, y: y - 52, width: CONTENT_W, height: 58, color: fill }); page.drawRectangle({ x: MARGIN, y: y - 52, width: 42, height: 58, color: index % 2 ? brand.secondary : brand.primary }); page.drawText(String(index + 1).padStart(2, "0"), { x: MARGIN + 13, y: y - 25, size: 12, font: fonts.bold, color: WHITE }); paragraph(page, copy, MARGIN + 56, y - 12, { font: fonts.regular, size: 9.5, width: CONTENT_W - 70, lineHeight: 14 }); y -= 72; });
 
   // 6. Garantías
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 6); title(page, 5, "Garantías del Sistema", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 6, logo); title(page, 5, "Garantías del Sistema", fonts, brand);
   const warrantyData = [["PANEL SOLAR", "Producto", "Según fabricante", "Rendimiento", "Hasta 25 años"], ["INVERSOR", "Producto", "Según modelo", "Cobertura", input.project.inverter || "Por seleccionar"], ["SOPORTE TÉCNICO", "Empresa", input.company.name, "Servicio", "Según contrato"]];
   const warrantyW = (CONTENT_W - 20) / 3;
   warrantyData.forEach((item, index) => { const x = MARGIN + index * (warrantyW + 10); page.drawRectangle({ x, y: 290, width: warrantyW, height: 315, borderColor: index === 1 ? brand.accent : rgb(.84, .88, .93), borderWidth: 1, color: WHITE }); page.drawText(item[0], { x: x + 16, y: 565, size: 10, font: fonts.bold, color: INK }); page.drawText(item[1].toUpperCase(), { x: x + 16, y: 510, size: 7, font: fonts.bold, color: MUTED }); paragraph(page, item[2], x + 16, 490, { font: fonts.display, size: 13, width: warrantyW - 32, lineHeight: 15 }); page.drawText(item[3].toUpperCase(), { x: x + 16, y: 420, size: 7, font: fonts.bold, color: MUTED }); paragraph(page, item[4], x + 16, 400, { font: fonts.display, size: 13, color: index === 1 ? brand.accent : brand.secondary, width: warrantyW - 32, lineHeight: 15 }); });
   page.drawRectangle({ x: MARGIN, y: 205, width: CONTENT_W, height: 54, color: brand.primary }); page.drawText(`${input.company.name.toUpperCase()}  |  25+ AÑOS DE VIDA ÚTIL  |  SOPORTE TÉCNICO`, { x: MARGIN + 18, y: 226, size: 8.5, font: fonts.bold, color: WHITE });
 
   // 7. Fases
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 7); title(page, 6, "Fases del Proyecto", fonts, brand);
+  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 7, logo); title(page, 6, "Fases del Proyecto", fonts, brand);
   page.drawText("PROCESO DE IMPLEMENTACIÓN PASO A PASO", { x: MARGIN, y: 620, size: 8, font: fonts.bold, color: MUTED });
   const phases = ["Aprobación distribuidora", "Instalación de equipos", "Visita de supervisión", "Acuerdos de interconexión", "Carta medidor bidireccional", "Instalación del medidor", "Arranque del sistema"];
   phases.forEach((phase, index) => { const row = index < 4 ? 0 : 1; const col = row === 0 ? index : index - 4; const columns = row === 0 ? 4 : 3; const stepW = CONTENT_W / columns; const x = MARGIN + col * stepW + stepW / 2; const cy = row === 0 ? 515 : 365; page.drawCircle({ x, y: cy, size: 14, color: index === 3 || index === 6 ? brand.accent : brand.primary }); const n = String(index + 1); page.drawText(n, { x: x - fonts.bold.widthOfTextAtSize(n, 8) / 2, y: cy - 3, size: 8, font: fonts.bold, color: WHITE }); const lines = wrap(phase, fonts.bold, 8.5, stepW - 14); lines.forEach((line, lineIndex) => page.drawText(line, { x: x - fonts.bold.widthOfTextAtSize(line, 8.5) / 2, y: cy - 34 - lineIndex * 11, size: 8.5, font: fonts.bold, color: INK })); });
@@ -201,6 +246,8 @@ export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Ui
   const contacts = [["TELÉFONO", input.company.phone || "N/D"], ["EMAIL", input.company.email || "N/D"], ["UBICACIÓN", input.company.address || "República Dominicana"]];
   contacts.forEach(([label, value], index) => { const x = MARGIN + index * CONTENT_W / 3 + 16; page.drawText(label, { x, y: 235, size: 7, font: fonts.bold, color: brand.accent }); page.drawText(fitText(value, fonts.regular, 9, CONTENT_W / 3 - 28), { x, y: 214, size: 9, font: fonts.regular, color: WHITE }); });
   footer(page, input, fonts, brand, 8, true);
+
+  await appendEquipmentAttachments(pdf, input, fonts, brand, logo);
 
   pdf.setTitle(`Propuesta energética - ${input.customer.name}`);
   pdf.setAuthor(input.company.name);

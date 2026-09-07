@@ -174,8 +174,8 @@ export function parseElectricInvoice(text: string): InvoiceOcrResult {
   // Detectar distribuidora
   const utility = ["EDENORTE", "EDESUR", "EDEESTE"].find((name) => upper.includes(name));
 
-  // Si no es EDENORTE, activar entrada manual
-  if (utility !== "EDENORTE") {
+  // Si no se identifica una distribuidora dominicana, conservar entrada manual.
+  if (!utility) {
     return { recognized: false, requiresManualEntry: true, utility, consumption: [], rawText: text };
   }
 
@@ -185,9 +185,10 @@ export function parseElectricInvoice(text: string): InvoiceOcrResult {
   const address = extractAddress(normalized);
   const consumption = extractConsumption(normalized);
 
+  const recognized = consumption.length >= 3;
   return {
-    recognized: true,
-    requiresManualEntry: false,
+    recognized,
+    requiresManualEntry: !recognized,
     customerName,
     nic,
     address,
