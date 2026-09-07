@@ -55,7 +55,8 @@ export function SolarCalculatorApp() {
     try {
       const form = new FormData(); form.append("file",file);
       const response = await fetch("/api/ocr",{method:"POST",body:form});
-      if (!response.ok) throw new Error("No fue posible leer la factura");
+      const errorData = response.ok ? null : await response.json().catch(() => null);
+      if (!response.ok) throw new Error(errorData?.error || "No fue posible leer la factura");
       const data = await response.json();
       if(data.requiresManualEntry){setOcrMessage("No se encontró un historial de consumo suficiente. Los campos manuales permanecen habilitados para completar la propuesta.");return;}
       setInputs((old)=>({...old,client:data.customerName||old.client,nic:data.nic||old.nic,address:data.address||old.address,tariff:data.tariff||old.tariff,utility:data.utility||old.utility}));

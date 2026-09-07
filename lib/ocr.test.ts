@@ -23,6 +23,11 @@ describe("parser OCR de facturas eléctricas",()=>{
     expect(result.utility).toBe("EDESUR");
     expect(result.consumption).toHaveLength(3);
   });
+  it("acepta variantes OCR del encabezado y años omitidos en las filas",()=>{
+    const result=parseElectricInvoice(`EDENORTE\nNOMBRE O RAZON SOCIAL: Cliente Norte\nHISTORICO DE CONSUMO\nEne 2026 410\nFeb 430\nMar 420`);
+    expect(result.recognized).toBe(true);
+    expect(result.consumption.map((item)=>item.kwh)).toEqual([410,430,420]);
+  });
   it("interpreta la tabla real de histórico de una factura MTD1N de EDENORTE",()=>{
     const text=`Edenorte Dominicana, S.A.
 CONTRATO : 7471365

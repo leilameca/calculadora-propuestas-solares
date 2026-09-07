@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: NextRequest) {
   const session = await sessionFromRequest(request);
   const requestedCompanyId = new URL(request.url).searchParams.get("companyId");
-  const companyId = session?.role === "SUPERADMIN" ? requestedCompanyId : session?.companyId;
+  const companyId = session?.role === "SUPERADMIN" ? (requestedCompanyId || session.companyId) : session?.companyId;
   if (!companyId) return NextResponse.json({ error: "Selecciona una empresa para continuar." }, { status: 400 });
   if (session?.role === "SUPERADMIN") {
     const company = await prisma.company.findUnique({ where: { id: companyId }, select: { active: true } });

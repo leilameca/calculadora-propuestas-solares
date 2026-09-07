@@ -92,7 +92,7 @@ function parseNumber(raw: string): number {
 }
 
 function extractEdenorteHistory(normalized: string): BilledConsumption[] {
-  const start = normalized.search(/HIST[ÓO]RICO\s+DE\s+CONSUMOS/i);
+  const start = normalized.search(/HIST[ÓO]RICO\s+DE\s+CONSUM(?:OS?|PTOS?)/i);
   if (start < 0) return [];
   const history = normalized.slice(start, normalized.search(/PAGUE\s+ANTES\s+DE/i) > start ? normalized.search(/PAGUE\s+ANTES\s+DE/i) : undefined);
   const records: BilledConsumption[] = [];
@@ -100,14 +100,17 @@ function extractEdenorteHistory(normalized: string): BilledConsumption[] {
   let previousMonth: number | undefined;
 
   for (const line of history.split("\n")) {
-    const match = line.trim().match(/^(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)\s+(?:(20\d{2})\s+)?([\d.,]+)/i);
+    const match = line.trim().match(/^(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)\s+(?:(20\d{2})\s+)?(.+)/i);
     if (!match) continue;
     const month = MONTH_ALIASES[match[1].toLowerCase()];
     if (!month) continue;
     const explicitYear = match[2] ? Number(match[2]) : undefined;
     if (explicitYear) inferredYear = explicitYear;
     else if (inferredYear && previousMonth && month < previousMonth) inferredYear += 1;
-    const kwh = parseNumber(match[3]);
+    const numericValues = [...match[3].matchAll(/\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?\b|\b\d+\b/g)]
+      .map((value) => parseNumber(value[0]))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const kwh = numericValues[0];
     if (inferredYear && Number.isFinite(kwh) && kwh > 0 && kwh < 1000000) {
       records.push({ month, year: inferredYear, kwh });
     }
