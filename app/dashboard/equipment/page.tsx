@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Boxes, FileCheck2, FileText, Loader2, Plus } from "lucide-react";
+import { Boxes, FileCheck2, FileText, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -41,6 +41,7 @@ export default function EquipmentPage() {
   const [form, setForm] = useState(emptyForm);
   const [datasheet, setDatasheet] = useState<File | null>(null);
   const [certificate, setCertificate] = useState<File | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -51,7 +52,7 @@ export default function EquipmentPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function create(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     if ([datasheet, certificate].some((file) => file && file.size > 4 * 1024 * 1024)) { setMessage("Cada documento debe pesar 4 MB o menos."); return; }
     setSaving(true);
@@ -68,9 +69,9 @@ export default function EquipmentPage() {
       warrantyYears: form.warrantyYears ? Number(form.warrantyYears) : null,
     };
     const response = await fetch("/api/equipment", {
-      method: "POST",
+      method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(editingId ? { ...body, id: editingId } : body),
     });
     const data = await response.json();
     if (!response.ok) { setSaving(false); setMessage(data.error || "No se pudo guardar el equipo."); return; }
@@ -83,9 +84,16 @@ export default function EquipmentPage() {
     setSaving(false);
     setForm(emptyForm);
     setDatasheet(null); setCertificate(null);
+    setEditingId(null);
     setShowForm(false);
-    setMessage("Equipo agregado al inventario.");
+    setMessage(editingId ? "Equipo actualizado correctamente." : "Equipo agregado al inventario.");
     await load();
+  }
+
+  function edit(item: Equipment) {
+    setEditingId(item.id);
+    setForm({ type: item.type, brand: item.brand, model: item.model, description: item.description || "", powerWatts: item.powerWatts?.toString() || "", capacityKwh: item.capacityKwh?.toString() || "", unitCostUsd: item.unitCostUsd, quantity: item.quantity, warrantyYears: item.warrantyYears?.toString() || "" });
+    setDatasheet(null); setCertificate(null); setMessage(""); setShowForm(true);
   }
 
   return (
@@ -101,9 +109,9 @@ export default function EquipmentPage() {
 
       {showForm && (
         <Card className="border-primary/30">
-          <CardHeader><CardTitle>Registrar equipo</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{editingId ? "Editar equipo" : "Registrar equipo"}</CardTitle></CardHeader>
           <CardContent>
-            <form onSubmit={create} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <label><span className="label">Tipo *</span><select className="field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as Equipment["type"] })}>{(Object.keys(typeLabels) as Equipment["type"][]).map((t) => <option key={t} value={t}>{typeLabels[t]}</option>)}</select></label>
               <label><span className="label">Marca *</span><input className="field" required value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></label>
               <label><span className="label">Modelo *</span><input className="field" required value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></label>
@@ -117,8 +125,8 @@ export default function EquipmentPage() {
               <label className="sm:col-span-1"><span className="label">Certificado (opcional)</span><input className="field file:mr-3 file:border-0 file:bg-transparent file:font-semibold" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setCertificate(e.target.files?.[0] || null)} /><span className="mt-1 block text-xs text-slate-500">PDF, PNG o JPG · máximo 4 MB</span></label>
               {message && <p className="text-sm font-medium text-primary sm:col-span-2 lg:col-span-3">{message}</p>}
               <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-                <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}Guardar equipo</Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : editingId ? <Pencil size={17} /> : <Plus size={17} />}{editingId ? "Actualizar equipo" : "Guardar equipo"}</Button>
+                <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancelar</Button>
               </div>
             </form>
           </CardContent>
@@ -155,7 +163,7 @@ export default function EquipmentPage() {
                       <td className="px-3 py-4 font-semibold">US$ {Number(item.unitCostUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                       <td className="px-3 py-4 text-center">{item.quantity}</td>
                       <td className="px-3 py-4 text-slate-500">{item.warrantyYears ? `${item.warrantyYears} años` : "—"}</td>
-                      <td className="px-3 py-4"><div className="flex min-w-28 flex-col gap-1 text-xs">{item.datasheetName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.datasheetName}><FileText size={14}/>Datasheet</span>:<span className="text-slate-400">Sin datasheet</span>}{item.certificateName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.certificateName}><FileCheck2 size={14}/>Certificado</span>:<span className="text-slate-400">Sin certificado</span>}</div></td>
+                      <td className="px-3 py-4"><div className="flex min-w-28 flex-col gap-1 text-xs">{item.datasheetName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.datasheetName}><FileText size={14}/>Datasheet</span>:<span className="text-slate-400">Sin datasheet</span>}{item.certificateName?<span className="inline-flex items-center gap-1 text-emerald-700" title={item.certificateName}><FileCheck2 size={14}/>Certificado</span>:<span className="text-slate-400">Sin certificado</span>}<button type="button" className="mt-1 inline-flex items-center gap-1 font-semibold text-primary" onClick={() => edit(item)}><Pencil size={14}/>Editar</button></div></td>
                     </tr>
                   ))}
                 </tbody>

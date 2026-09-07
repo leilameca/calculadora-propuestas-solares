@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Search, Users } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -35,6 +35,7 @@ export default function CustomersPage() {
   const [role, setRole] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load(selectedCompanyId = companyId) {
     setLoading(true);
@@ -59,22 +60,29 @@ export default function CustomersPage() {
     if (role !== "SUPERADMIN" || companyId) void load(companyId);
   }, [role, companyId]);
 
-  async function create(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setMessage("");
     const response = await fetch("/api/customers", {
-      method: "POST",
+      method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, ...(role === "SUPERADMIN" ? { companyId } : {}) }),
+      body: JSON.stringify({ ...form, ...(editingId ? { id: editingId } : {}), ...(role === "SUPERADMIN" ? { companyId } : {}) }),
     });
     const data = await response.json();
     setSaving(false);
     if (!response.ok) { setMessage(data.error || "No se pudo crear el cliente."); return; }
     setForm(emptyForm);
+    setEditingId(null);
     setShowForm(false);
-    setMessage("Cliente creado correctamente.");
+    setMessage(editingId ? "Cliente actualizado correctamente." : "Cliente creado correctamente.");
     await load();
+  }
+
+  function edit(customer: Customer) {
+    setEditingId(customer.id);
+    setForm({ name: customer.name, nic: customer.nic || "", rnc: customer.rnc || "", email: customer.email || "", phone: customer.phone || "", address: customer.address || "", city: customer.city || "", utility: customer.utility || "EDENORTE", tariff: customer.tariff || "BTS-1" });
+    setMessage(""); setShowForm(true);
   }
 
   const filtered = customers.filter((c) => {
@@ -95,9 +103,9 @@ export default function CustomersPage() {
 
       {showForm && (
         <Card className="border-primary/30">
-          <CardHeader><CardTitle>Registrar cliente</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{editingId ? "Editar cliente" : "Registrar cliente"}</CardTitle></CardHeader>
           <CardContent>
-            <form onSubmit={create} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {role === "SUPERADMIN" && <label className="sm:col-span-2 lg:col-span-3"><span className="label">Empresa *</span><select className="field" required value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">Selecciona una empresa</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}
               <label className="sm:col-span-2 lg:col-span-1"><span className="label">Nombre *</span><input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
               <label><span className="label">NIC</span><input className="field" value={form.nic} onChange={(e) => setForm({ ...form, nic: e.target.value })} /></label>
@@ -110,8 +118,8 @@ export default function CustomersPage() {
               <label className="sm:col-span-2 lg:col-span-3"><span className="label">Dirección</span><input className="field" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
               {message && <p className="text-sm font-medium text-primary sm:col-span-2 lg:col-span-3">{message}</p>}
               <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-                <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}Guardar cliente</Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                <Button type="submit" disabled={saving}>{saving ? <Loader2 size={17} className="animate-spin" /> : editingId ? <Pencil size={17} /> : <Plus size={17} />}{editingId ? "Actualizar cliente" : "Guardar cliente"}</Button>
+                <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancelar</Button>
               </div>
             </form>
           </CardContent>
@@ -141,7 +149,7 @@ export default function CustomersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-slate-500">
-                    {["Cliente", "NIC / RNC", "Contacto", "Ubicación", "Tarifa", "Propuestas"].map((h) => <th key={h} className="px-3 py-3">{h}</th>)}
+                      {["Cliente", "NIC / RNC", "Contacto", "Ubicación", "Tarifa", "Propuestas", ""].map((h) => <th key={h || "actions"} className="px-3 py-3">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -153,6 +161,7 @@ export default function CustomersPage() {
                       <td className="px-3 py-4 text-slate-500">{c.city || c.address || "—"}</td>
                       <td className="px-3 py-4"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{c.utility || "—"} {c.tariff || ""}</span></td>
                       <td className="px-3 py-4 text-center font-semibold">{c._count.proposals}</td>
+                      <td className="px-3 py-4 text-right"><Button type="button" variant="ghost" className="h-8 px-2" title="Editar cliente" onClick={() => edit(c)}><Pencil size={15} /></Button></td>
                     </tr>
                   ))}
                 </tbody>

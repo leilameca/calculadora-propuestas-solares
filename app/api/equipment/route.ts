@@ -38,3 +38,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo crear el equipo." }, { status: 400 });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await sessionFromRequest(request);
+    if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
+    const body = await request.json();
+    if (!body.id || !body.type || !body.brand || !body.model || !Number.isFinite(Number(body.unitCostUsd))) {
+      return NextResponse.json({ error: "Equipo, tipo, marca, modelo y costo son obligatorios." }, { status: 400 });
+    }
+    const existing = await prisma.equipmentInventory.findFirst({ where: { id: String(body.id), companyId: session.companyId }, select: { id: true } });
+    if (!existing) return NextResponse.json({ error: "Equipo no encontrado." }, { status: 404 });
+    const equipment = await prisma.equipmentInventory.update({ where: { id: existing.id }, data: {
+      type: body.type, brand: String(body.brand).trim(), model: String(body.model).trim(),
+      description: body.description ? String(body.description).trim() : null,
+      powerWatts: body.powerWatts == null ? null : Number(body.powerWatts),
+      capacityKwh: body.capacityKwh == null ? null : Number(body.capacityKwh),
+      unitCostUsd: Number(body.unitCostUsd), quantity: Math.max(0, Number(body.quantity || 0)),
+      warrantyYears: body.warrantyYears == null ? null : Number(body.warrantyYears),
+    }, select: equipmentSelect });
+    return NextResponse.json(equipment);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo actualizar el equipo." }, { status: 400 });
+  }
+}
