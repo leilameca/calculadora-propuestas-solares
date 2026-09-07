@@ -18,3 +18,4 @@ output/
 .neon
 
 .vercel
+.env*
