@@ -16,7 +16,7 @@ type Proposal = {
 };
 
 const selectableStatuses: Array<{value:Status;label:string}> = [
-  {value:"DRAFT",label:"Borrador"},{value:"SENT",label:"Entregada"},{value:"ACCEPTED",label:"Completada"},{value:"REJECTED",label:"Cancelada"},
+  {value:"DRAFT",label:"Borrador"},{value:"SENT",label:"Entregada"},{value:"ACCEPTED",label:"Aprobada"},{value:"REJECTED",label:"Cancelada"},
 ];
 const statusStyles:Record<Status,string>={DRAFT:"bg-amber-50 text-amber-700",SENT:"bg-sky-50 text-sky-700",ACCEPTED:"bg-emerald-50 text-emerald-700",REJECTED:"bg-red-50 text-red-700",EXPIRED:"bg-slate-100 text-slate-600"};
 
