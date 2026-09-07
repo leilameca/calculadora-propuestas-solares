@@ -20,6 +20,8 @@ type Customer = {
   _count: { proposals: number };
 };
 
+type Company = { id: string; name: string; active: boolean };
+
 const emptyForm = { name: "", nic: "", rnc: "", email: "", phone: "", address: "", city: "", utility: "EDENORTE", tariff: "BTS-1" };
 
 export default function CustomersPage() {
@@ -30,15 +32,32 @@ export default function CustomersPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [query, setQuery] = useState("");
+  const [role, setRole] = useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companyId, setCompanyId] = useState("");
 
-  async function load() {
+  async function load(selectedCompanyId = companyId) {
     setLoading(true);
-    const response = await fetch("/api/customers");
+    const queryString = selectedCompanyId ? `?companyId=${encodeURIComponent(selectedCompanyId)}` : "";
+    const response = await fetch(`/api/customers${queryString}`);
     if (response.ok) setCustomers(await response.json());
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    fetch("/api/me").then((response) => response.ok ? response.json() : null).then((data) => {
+      if (data?.role) setRole(data.role);
+      if (data?.companyId) setCompanyId(data.companyId);
+    }).catch(() => undefined);
+    fetch("/api/companies").then((response) => response.ok ? response.json() : []).then((data: Company[]) => {
+      setCompanies(data.filter((company) => company.active));
+      if (data.length === 1) setCompanyId(data[0].id);
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (role !== "SUPERADMIN" || companyId) void load(companyId);
+  }, [role, companyId]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +66,7 @@ export default function CustomersPage() {
     const response = await fetch("/api/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ...(role === "SUPERADMIN" ? { companyId } : {}) }),
     });
     const data = await response.json();
     setSaving(false);
@@ -79,6 +98,7 @@ export default function CustomersPage() {
           <CardHeader><CardTitle>Registrar cliente</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={create} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {role === "SUPERADMIN" && <label className="sm:col-span-2 lg:col-span-3"><span className="label">Empresa *</span><select className="field" required value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">Selecciona una empresa</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}
               <label className="sm:col-span-2 lg:col-span-1"><span className="label">Nombre *</span><input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
               <label><span className="label">NIC</span><input className="field" value={form.nic} onChange={(e) => setForm({ ...form, nic: e.target.value })} /></label>
               <label><span className="label">RNC</span><input className="field" value={form.rnc} onChange={(e) => setForm({ ...form, rnc: e.target.value })} /></label>
@@ -101,6 +121,7 @@ export default function CustomersPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>Directorio ({filtered.length})</CardTitle>
+          {role === "SUPERADMIN" && <select className="field w-56" value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">Selecciona una empresa</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select>}
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input className="field w-56 pl-9" placeholder="Buscar por nombre, NIC o RNC" value={query} onChange={(e) => setQuery(e.target.value)} />

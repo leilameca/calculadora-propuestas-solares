@@ -4,9 +4,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   const session = await sessionFromRequest(request);
-  if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestedCompanyId = new URL(request.url).searchParams.get("companyId");
+  const companyId = session?.role === "SUPERADMIN" ? requestedCompanyId : session?.companyId;
+  if (!companyId) return NextResponse.json({ error: "Selecciona una empresa para continuar." }, { status: 400 });
+  if (session?.role === "SUPERADMIN") {
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { active: true } });
+    if (!company) return NextResponse.json({ error: "La empresa seleccionada no existe." }, { status: 404 });
+  }
   const customers = await prisma.customer.findMany({
-    where: { companyId: session.companyId },
+    where: { companyId },
     include: { _count: { select: { proposals: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -15,13 +21,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await sessionFromRequest(request);
-  if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const body = await request.json();
+  const companyId = session?.role === "SUPERADMIN" ? String(body.companyId || "") : session?.companyId;
+  if (!companyId) return NextResponse.json({ error: "Selecciona una empresa para continuar." }, { status: 400 });
   if (!body.name) return NextResponse.json({ error: "El nombre del cliente es obligatorio." }, { status: 400 });
   try {
+    if (session?.role === "SUPERADMIN") {
+      const company = await prisma.company.findUnique({ where: { id: companyId }, select: { active: true } });
+      if (!company) return NextResponse.json({ error: "La empresa seleccionada no existe." }, { status: 404 });
+      if (!company.active) return NextResponse.json({ error: "La empresa seleccionada está inactiva." }, { status: 400 });
+    }
     const customer = await prisma.customer.create({
       data: {
-        companyId: session.companyId,
+        companyId,
         name: String(body.name).trim(),
         nic: body.nic ? String(body.nic).trim() : null,
         rnc: body.rnc ? String(body.rnc).trim() : null,
