@@ -17,8 +17,8 @@ const defaultCompany:CompanyBrand={name:"EILEN Electric Service",rnc:"1-31-00000
 
 export function SolarCalculatorApp() {
   const [inputs, setInputs] = useState<Inputs>({ client:"",nic:"",address:"",city:"Santiago",utility:"EDENORTE",tariff:"BTS-1",panelEquipmentId:"",panelWatts:590,oversizingFactor:1.2,costPerWpUsd:.95,exchangeRate:60,systemType:"On-Grid",inverter:"",battery:"",itbisEnabled:true,itbisRate:.18,designMode:"automatic",manualPanelCount:20 });
-  const [consumption, setConsumption] = useState<number[]>([1060,980,1015,1100,1180,1240,1320,1290,1190,1110,1040,1025]);
-  const [billedRecords,setBilledRecords]=useState<BilledConsumption[]>(consumption.map((kwh,index)=>({month:index+1,year:new Date().getFullYear(),kwh})));
+  const [consumption, setConsumption] = useState<number[]>(Array(12).fill(0));
+  const [billedRecords,setBilledRecords]=useState<BilledConsumption[]>([]);
   const [averageCount, setAverageCount] = useState(6);
   const [useAverage, setUseAverage] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
