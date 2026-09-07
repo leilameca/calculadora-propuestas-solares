@@ -29,6 +29,8 @@ export function SolarCalculatorApp() {
   const [company,setCompany]=useState<CompanyBrand>(defaultCompany);
   const [inventory,setInventory]=useState<InventoryItem[]>([]);
   const [customers,setCustomers]=useState<Customer[]>([]);
+  const [additionalName,setAdditionalName]=useState("");
+  const [additionalAmount,setAdditionalAmount]=useState("");
   useEffect(()=>{fetch("/api/company").then(r=>r.ok?r.json():null).then(data=>{if(!data)return;setCompany({...defaultCompany,...data,coverImages:Array.isArray(data.coverImages)?data.coverImages:[]});setInputs(old=>({...old,itbisEnabled:data.itbisEnabled!==false,itbisRate:data.itbisRate == null ? 0.18 : Number(data.itbisRate)}))}).catch(()=>undefined)},[]);
   useEffect(()=>{fetch("/api/equipment").then(r=>r.ok?r.json():[]).then(data=>setInventory(Array.isArray(data)?data:[])).catch(()=>setInventory([]))},[]);
   useEffect(()=>{fetch("/api/customers").then(r=>r.ok?r.json():[]).then(data=>setCustomers(Array.isArray(data)?data:[])).catch(()=>setCustomers([]))},[]);
@@ -48,6 +50,17 @@ export function SolarCalculatorApp() {
   const projection = result ? result.projection25Years.map((row)=>({ year:row.year, generacion:Math.round(row.generationKwh), ahorro:Math.round(row.accumulatedSavingsDop) })) : [];
 
   function set<K extends keyof Inputs>(key: K, value: Inputs[K]) { setInputs((old)=>({...old,[key]:value})); }
+  function quoteItems() {
+    const items = defaultQuote(result?.costUsd || 0, result?.panelCount || 0, inputs.panelWatts, inputs.inverter, inputs.systemType, inputs.battery);
+    const amount = Number(additionalAmount);
+    if (additionalName.trim() && Number.isFinite(amount) && amount > 0) items.push({ name: additionalName.trim(), description: "Adicional solicitado", amountUsd: amount });
+    return items;
+  }
+  function quoteTotals() {
+    const subtotalUsd = quoteItems().reduce((sum,item)=>sum+item.amountUsd,0);
+    const taxUsd = inputs.itbisEnabled ? subtotalUsd * inputs.itbisRate : 0;
+    return { subtotalUsd, taxUsd, totalUsd: subtotalUsd + taxUsd };
+  }
   async function scan(file?: File) {
     if (!file) return;
     setOcrBusy(true);
@@ -87,13 +100,11 @@ export function SolarCalculatorApp() {
           monthlyConsumption: effectiveConsumption,
           calculationInput: { ...inputs, hsp: HSP_BY_CITY[inputs.city] },
           calculationResult: result,
-          quoteItems: defaultQuote(result.costUsd, result.panelCount, inputs.panelWatts, inputs.inverter, inputs.systemType, inputs.battery),
+          quoteItems: quoteItems(),
           selectedInverterId: selectedInverter?.id || null,
           manualInverter: selectedInverter ? null : inputs.inverter || null,
           exchangeRate: inputs.exchangeRate,
-          subtotalUsd: result.costUsd,
-          taxUsd: result.itbisUsd,
-          totalUsd: result.totalUsd,
+          ...quoteTotals(),
         }),
       });
       const data = await response.json();
@@ -108,7 +119,7 @@ export function SolarCalculatorApp() {
   function proposalPayload() {
     if (!result) return null;
     const selectedInverter=inventory.find((item)=>item.type==="INVERTER"&&equipmentLabel(item)===inputs.inverter),selectedBattery=inventory.find((item)=>item.type==="BATTERY"&&equipmentLabel(item)===inputs.battery);
-    return { company:{...company,logoBase64:company.logoUrl,coverImageBase64:company.coverImageUrl||company.coverImages?.[0],backCoverImageBase64:company.backCoverImageUrl||company.coverImages?.[1]||company.coverImages?.[0],itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate}, customer:{name:inputs.client||"Cliente de demostración",nic:inputs.nic||"N/D",address:inputs.address||inputs.city}, project:{name:"Sistema Solar Fotovoltaico",city:inputs.city,utility:inputs.utility,tariff:inputs.tariff,systemType:inputs.systemType,panelWatts:inputs.panelWatts,inverter:inputs.inverter||"Por seleccionar"},consumption:effectiveConsumption,result,quoteItems:defaultQuote(result.costUsd,result.panelCount,inputs.panelWatts,inputs.inverter,inputs.systemType,inputs.battery),selectedEquipmentIds:[inputs.panelEquipmentId,selectedInverter?.id,selectedBattery?.id].filter((id):id is string=>Boolean(id))};
+    return { company:{...company,logoBase64:company.logoUrl,coverImageBase64:company.coverImageUrl||company.coverImages?.[0],backCoverImageBase64:company.backCoverImageUrl||company.coverImages?.[1]||company.coverImages?.[0],itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate}, customer:{name:inputs.client||"Cliente de demostración",nic:inputs.nic||"N/D",address:inputs.address||inputs.city}, project:{name:"Sistema Solar Fotovoltaico",city:inputs.city,utility:inputs.utility,tariff:inputs.tariff,systemType:inputs.systemType,panelWatts:inputs.panelWatts,inverter:inputs.inverter||"Por seleccionar"},consumption:effectiveConsumption,result,quoteItems:quoteItems(),selectedEquipmentIds:[inputs.panelEquipmentId,selectedInverter?.id,selectedBattery?.id].filter((id):id is string=>Boolean(id))};
   }
   async function exportProposal(format:"docx"|"pdf") {
     if (!result) return;
@@ -130,7 +141,7 @@ export function SolarCalculatorApp() {
     <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
       <div className="space-y-6"><Card><CardHeader><CardTitle>Cliente y suministro</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
         <Field label="Cliente existente"><select className="field" value={customers.find((customer)=>customer.name===inputs.client&&customer.nic===inputs.nic)?.id||"new"} onChange={e=>{const customer=customers.find((item)=>item.id===e.target.value);if(!customer){setInputs(old=>({...old,client:"",nic:"",address:""}));return;}setInputs(old=>({...old,client:customer.name,nic:customer.nic||"",address:customer.address||"",city:(customer.city as Inputs["city"])||old.city,utility:(customer.utility as Utility)||old.utility,tariff:(customer.tariff as Tariff)||old.tariff}))}}><option value="new">Nuevo cliente</option>{customers.map((customer)=><option key={customer.id} value={customer.id}>{customer.name}{customer.nic?` · ${customer.nic}`:""}</option>)}</select></Field><Field label="Cliente"><input className="field" value={inputs.client} onChange={e=>set("client",e.target.value)} placeholder="Nombre o razón social"/></Field><Field label="NIC"><input className="field" value={inputs.nic} onChange={e=>set("nic",e.target.value)} placeholder="Contrato energético"/></Field><Field label="Dirección" wide><input className="field" value={inputs.address} onChange={e=>set("address",e.target.value)} placeholder="Ubicación del proyecto"/></Field>
-        <Field label="Provincia / ciudad"><select className="field" value={inputs.city} onChange={e=>set("city",e.target.value as Inputs["city"])}>{Object.keys(HSP_BY_CITY).map(v=><option key={v}>{v}</option>)}</select></Field><Field label="HSP"><input className="field bg-slate-50" readOnly value={HSP_BY_CITY[inputs.city].toFixed(2)}/></Field><Field label="Distribuidora"><select className="field" value={inputs.utility} onChange={e=>set("utility",e.target.value as Utility)}>{["EDENORTE","EDESUR","EDEESTE"].map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Tarifa"><select className="field" value={inputs.tariff} onChange={e=>set("tariff",e.target.value as Tariff)}>{["BTS-1","BTS-2","BTD","BTH","MTD-1","MTD-2","MTH"].map(v=><option key={v}>{v}</option>)}</select></Field>
+        <Field label="Provincia / ciudad"><select className="field" value={inputs.city} onChange={e=>set("city",e.target.value as Inputs["city"])}>{Object.keys(HSP_BY_CITY).map(v=><option key={v}>{v}</option>)}</select></Field><Field label="HSP"><input className="field bg-slate-50" readOnly value={HSP_BY_CITY[inputs.city].toFixed(2)}/></Field><Field label="Distribuidora"><select className="field" value={inputs.utility} onChange={e=>set("utility",e.target.value as Utility)}>{["EDENORTE","EDESUR","EDEESTE"].map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Tarifa"><select className="field" value={inputs.tariff} onChange={e=>set("tariff",e.target.value as Tariff)}>{["BTS-1","BTS-2","BTD","BTH","MTD-1","MTD-2","MTH"].map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Adicional (nombre)"><input className="field" value={additionalName} onChange={e=>setAdditionalName(e.target.value)} placeholder="Ej. Adecuación eléctrica"/></Field><Field label="Adicional (monto USD)"><input className="field" type="number" min="0" step="0.01" value={additionalAmount} onChange={e=>setAdditionalAmount(e.target.value)} placeholder="0.00"/></Field>
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Configuración técnica</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><Field label="Tipo de sistema"><select className="field" value={inputs.systemType} onChange={e=>set("systemType",e.target.value)}><option>On-Grid</option><option>Híbrido</option><option>Off-Grid</option></select></Field><Field label="Modo de diseño"><select className="field" value={inputs.designMode} onChange={e=>set("designMode",e.target.value as Inputs["designMode"])}><option value="automatic">Automático (según consumo)</option><option value="manual">Manual (cantidad de paneles)</option></select></Field>{inputs.designMode==="manual"&&<NumberField label="Cantidad de paneles" value={inputs.manualPanelCount} onChange={v=>set("manualPanelCount",v)}/>}<Field label="Panel del inventario"><select className="field" value={inputs.panelEquipmentId} onChange={e=>{const id=e.target.value,item=inventory.find(candidate=>candidate.id===id);setInputs(old=>({...old,panelEquipmentId:id,panelWatts:item?.powerWatts||old.panelWatts}))}}><option value="">Configuración manual</option>{inventory.filter(item=>item.type==="PANEL").map(item=><option key={item.id} value={item.id}>{equipmentLabel(item)}</option>)}</select></Field><NumberField label="Panel (W)" value={inputs.panelWatts} onChange={v=>set("panelWatts",v)}/><NumberField label="Sobredimensionamiento" value={inputs.oversizingFactor} step="0.05" onChange={v=>set("oversizingFactor",v)}/><NumberField label="Costo USD/Wp" value={inputs.costPerWpUsd} step="0.01" onChange={v=>set("costPerWpUsd",v)}/><NumberField label="Tasa RD$/USD" value={inputs.exchangeRate} step="0.01" onChange={v=>set("exchangeRate",v)}/><Field label="Aplicar ITBIS"><select className="field" value={inputs.itbisEnabled?"yes":"no"} onChange={e=>set("itbisEnabled",e.target.value==="yes")}><option value="yes">Sí</option><option value="no">No</option></select></Field><Field label="Tasa ITBIS (%)"><input className="field text-right disabled:cursor-not-allowed disabled:bg-slate-100" type="number" min="0" max="100" step="0.01" disabled={!inputs.itbisEnabled} value={inputs.itbisRate*100} onChange={e=>set("itbisRate",Number(e.target.value)/100)}/></Field><Field label="Inversor" wide><input className="field" list="tenant-inverters" value={inputs.inverter} onChange={e=>set("inverter",e.target.value)} placeholder="Selecciona del inventario o escribe una especificación"/><datalist id="tenant-inverters">{inventory.filter(item=>item.type==="INVERTER").map(item=><option key={item.id} value={equipmentLabel(item)}>{item.quantity} disponibles</option>)}</datalist><p className="mt-1 text-[11px] text-slate-500">No se asigna automáticamente. Puedes elegir un inversor activo del inventario o escribir cualquier modelo manualmente.</p></Field>{inputs.systemType!=="On-Grid"&&<Field label="Batería" wide><input className="field" list="tenant-batteries" value={inputs.battery} onChange={e=>set("battery",e.target.value)} placeholder="Selecciona del inventario o escribe la batería"/><datalist id="tenant-batteries">{inventory.filter(item=>item.type==="BATTERY").map(item=><option key={item.id} value={equipmentLabel(item)}>{item.quantity} disponibles</option>)}</datalist></Field>}</CardContent></Card></div>
 
