@@ -1,10 +1,11 @@
+import { apiHandler } from "@/lib/api-handler";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
 import { fileUrl, ownedFile, sha256 } from "@/lib/storage/files";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handleGET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {
@@ -18,3 +19,5 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     } });
   } catch { return NextResponse.json({ error: "Archivo no disponible." }, { status: 404 }); }
 }
+
+export const GET = apiHandler(handleGET);

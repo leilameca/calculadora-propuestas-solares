@@ -9,6 +9,8 @@ export const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).
 
 export async function uploadFile(companyId: string, bytes: Uint8Array, name: string, mimeType: string, imagesOnly = false) {
   await validateFile(bytes, mimeType, imagesOnly);
+  const existing = await prisma.storedFile.findFirst({where:{companyId,sha256:sha256(bytes)}});
+  if(existing)return {...existing,url:fileUrl(existing.id)};
   const provider = storageProvider(), storage = getStorage(provider);
   const key = `companies/${companyId}/${randomUUID()}`;
   const hash = sha256(bytes);
@@ -45,9 +47,12 @@ export async function persistMedia(value: string | null | undefined, companyId: 
 
 export async function resolveMedia(value: string | null | undefined, companyId: string) {
   if (!value) return undefined;
-  if (value.startsWith("data:")) { decodeDataUrl(value); return value; }
+  if (value.startsWith("data:")) return value;
+  if (!fileId(value)) { console.warn("storage.legacy_url_unavailable"); return undefined; }
   const record = await ownedFile(value, companyId);
-  const bytes = await getStorage(record.provider).read(record.key);
-  if (bytes.length !== record.size || sha256(bytes) !== record.sha256) throw new Error("Integridad de archivo inválida.");
-  return `data:${record.mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
+  try {
+    const bytes = await getStorage(record.provider).read(record.key);
+    if (bytes.length !== record.size || sha256(bytes) !== record.sha256) throw new Error("Integridad de archivo inválida.");
+    return `data:${record.mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
+  } catch { console.warn("storage.object_unavailable", { id: record.id }); return undefined; }
 }

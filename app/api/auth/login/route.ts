@@ -1,9 +1,10 @@
+import { apiHandler } from "@/lib/api-handler";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken } from "@/lib/auth";
 
-export async function POST(request:NextRequest){
+async function handlePOST(request:NextRequest){
   const startedAt=performance.now();
   const {email,password}=await request.json();
   const normalizedEmail=String(email||"").trim().toLowerCase();
@@ -21,3 +22,5 @@ export async function POST(request:NextRequest){
   response.cookies.set("solar_session",token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:60*60*8});
   return response;
 }
+
+export const POST = apiHandler(handlePOST);

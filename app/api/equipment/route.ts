@@ -1,3 +1,4 @@
+import { apiHandler } from "@/lib/api-handler";
 import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -10,7 +11,7 @@ const equipmentSelect = {
   logoUrl:true,
 } as const;
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
   return NextResponse.json(await prisma.equipmentInventory.findMany({
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
   }));
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const session = await sessionFromRequest(request);
     if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PATCH(request: NextRequest) {
+async function handlePATCH(request: NextRequest) {
   try {
     const session = await sessionFromRequest(request);
     if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
@@ -68,3 +69,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo actualizar el equipo." }, { status: 400 });
   }
 }
+
+export const GET = apiHandler(handleGET);
+export const POST = apiHandler(handlePOST);
+export const PATCH = apiHandler(handlePATCH);

@@ -1,10 +1,11 @@
+import { apiHandler } from "@/lib/api-handler";
 import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { sessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const id = request.nextUrl.searchParams.get("id");
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   let body = mutationSchema.parse(await readJson(request));
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PATCH(request: NextRequest) {
+async function handlePATCH(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   let body = mutationSchema.parse(await readJson(request));
@@ -173,3 +174,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo actualizar la propuesta." }, { status: 400 });
   }
 }
+
+export const GET = apiHandler(handleGET);
+export const POST = apiHandler(handlePOST);
+export const PATCH = apiHandler(handlePATCH);

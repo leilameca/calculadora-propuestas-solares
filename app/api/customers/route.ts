@@ -1,9 +1,10 @@
+import { apiHandler } from "@/lib/api-handler";
 import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const session = await sessionFromRequest(request);
   const requestedCompanyId = new URL(request.url).searchParams.get("companyId");
   const companyId = session?.role === "SUPERADMIN" ? (requestedCompanyId || session.companyId) : session?.companyId;
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(customers);
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const session = await sessionFromRequest(request);
   let body = mutationSchema.parse(await readJson(request));
   const companyId = session?.role === "SUPERADMIN" ? String(body.companyId || "") : session?.companyId;
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PATCH(request: NextRequest) {
+async function handlePATCH(request: NextRequest) {
   const session = await sessionFromRequest(request);
   let body = mutationSchema.parse(await readJson(request));
   const companyId = session?.role === "SUPERADMIN" ? String(body.companyId || "") : session?.companyId;
@@ -82,3 +83,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo actualizar el cliente." }, { status: 400 });
   }
 }
+
+export const GET = apiHandler(handleGET);
+export const POST = apiHandler(handlePOST);
+export const PATCH = apiHandler(handlePATCH);

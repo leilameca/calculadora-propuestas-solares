@@ -1,12 +1,13 @@
+import { apiHandler } from "@/lib/api-handler";
 import { NextRequest,NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sessionFromRequest } from "@/lib/auth";
-export async function GET(request:NextRequest){const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});return NextResponse.json(await prisma.company.findMany({select:{id:true,name:true,slug:true,rnc:true,email:true,active:true,createdAt:true,_count:{select:{users:true,customers:true,proposals:true}}},orderBy:{createdAt:"desc"}}));}
-export async function POST(request:NextRequest){try{const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});const body=await request.json();if(!body.name||!body.slug||!body.adminName||!body.adminEmail||String(body.adminPassword||"").length<8)return NextResponse.json({error:"Completa los datos y usa una contraseña temporal de al menos 8 caracteres."},{status:400});const passwordHash=await bcrypt.hash(body.adminPassword,12);const company=await prisma.$transaction(async (tx:Prisma.TransactionClient)=>{const tenant=await tx.company.create({data:{name:String(body.name).trim(),slug:String(body.slug).toLowerCase().trim().replace(/[^a-z0-9-]/g,"-"),rnc:body.rnc||null,email:body.email||null,phone:body.phone||null}});await tx.user.create({data:{companyId:tenant.id,name:String(body.adminName).trim(),email:String(body.adminEmail).toLowerCase().trim(),passwordHash,role:"COMPANY_ADMIN"}});return tenant;});return NextResponse.json(company,{status:201});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:"No se pudo crear la empresa"},{status:409});}}
+async function handleGET(request:NextRequest){const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});return NextResponse.json(await prisma.company.findMany({select:{id:true,name:true,slug:true,rnc:true,email:true,active:true,createdAt:true,_count:{select:{users:true,customers:true,proposals:true}}},orderBy:{createdAt:"desc"}}));}
+async function handlePOST(request:NextRequest){try{const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});const body=await request.json();if(!body.name||!body.slug||!body.adminName||!body.adminEmail||String(body.adminPassword||"").length<8)return NextResponse.json({error:"Completa los datos y usa una contraseña temporal de al menos 8 caracteres."},{status:400});const passwordHash=await bcrypt.hash(body.adminPassword,12);const company=await prisma.$transaction(async (tx:Prisma.TransactionClient)=>{const tenant=await tx.company.create({data:{name:String(body.name).trim(),slug:String(body.slug).toLowerCase().trim().replace(/[^a-z0-9-]/g,"-"),rnc:body.rnc||null,email:body.email||null,phone:body.phone||null}});await tx.user.create({data:{companyId:tenant.id,name:String(body.adminName).trim(),email:String(body.adminEmail).toLowerCase().trim(),passwordHash,role:"COMPANY_ADMIN"}});return tenant;});return NextResponse.json(company,{status:201});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:"No se pudo crear la empresa"},{status:409});}}
 
-export async function PATCH(request:NextRequest){
+async function handlePATCH(request:NextRequest){
   try {
     const session=await sessionFromRequest(request);
     if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});
@@ -18,3 +19,7 @@ export async function PATCH(request:NextRequest){
     return NextResponse.json({error:error instanceof Error?error.message:"No se pudo actualizar la empresa"},{status:409});
   }
 }
+
+export const GET = apiHandler(handleGET);
+export const POST = apiHandler(handlePOST);
+export const PATCH = apiHandler(handlePATCH);

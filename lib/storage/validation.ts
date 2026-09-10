@@ -5,6 +5,7 @@ export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const FILE_TYPES = ["application/pdf", ...IMAGE_TYPES] as const;
 
 export function safeFileName(name: string): string {
+  // eslint-disable-next-line no-control-regex -- Strip control bytes from download filenames.
   return name.normalize("NFC").replace(/[\\/\x00-\x1f\x7f<>:"|?*]/g, "_").slice(0, 150).trim() || "archivo";
 }
 

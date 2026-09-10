@@ -1,3 +1,4 @@
+import { apiHandler, readForm } from "@/lib/api-handler";
 import { uploadFile } from "@/lib/storage/files";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
@@ -6,12 +7,12 @@ import { prisma } from "@/lib/prisma";
 const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await sessionFromRequest(request);
     if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
     const { id } = await context.params;
-    const form = await request.formData();
+    const form = await readForm(request);
     const kind = form.get("kind");
     const file = form.get("file");
     if ((kind !== "datasheet" && kind !== "certificate") || !(file instanceof File)) return NextResponse.json({ error: "Documento inválido." }, { status: 400 });
@@ -29,3 +30,5 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo guardar el documento." }, { status: 400 });
   }
 }
+
+export const POST = apiHandler(handlePOST);

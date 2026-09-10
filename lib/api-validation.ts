@@ -22,8 +22,8 @@ export async function readJson(request: NextRequest): Promise<Record<string, unk
 const text = z.string().max(1000);
 const media = z.string().max(5_600_000).nullable().optional();
 export const mutationSchema = z.object({
-  id: text.optional(), companyId: text.optional(), name: text.optional(), customerName: text.optional(), projectName: text.optional(),
-  customerId: text.optional(), customerNic: text.nullable().optional(), customerAddress: text.nullable().optional(),
+  id: text.nullable().optional(), companyId: text.optional(), name: text.optional(), customerName: text.optional(), projectName: text.optional(),
+  customerId: text.nullable().optional(), customerNic: text.nullable().optional(), customerAddress: text.nullable().optional(),
   nic: text.nullable().optional(), rnc: text.nullable().optional(), email: text.nullable().optional(), phone: text.nullable().optional(), address: text.nullable().optional(),
   city: text.optional(), utility: text.optional(), tariff: text.optional(), systemType: text.optional(),
   status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"]).optional(), version: z.number().int().positive().optional(),
@@ -46,5 +46,12 @@ export async function persistBodyMedia<T extends Record<string, unknown>>(body: 
     if (typeof value === "string") result[field] = await persistMedia(value, companyId, typeof body.invoiceName === "string" && field === "invoiceData" ? body.invoiceName : field, field !== "invoiceData");
   }
   if (Array.isArray(body.coverImages)) result.coverImages = await Promise.all(body.coverImages.map(value => persistMedia(String(value), companyId, "portada")));
+  assertMetadataOnly(result);
   return result as T;
+}
+
+function assertMetadataOnly(value: unknown, depth = 0): void {
+  if (depth > 15) throw new Error("Datos demasiado anidados.");
+  if (typeof value === "string" && /data:[^;,]+;base64,/i.test(value)) throw new Error("Los archivos deben cargarse mediante los campos de medios.");
+  if (value && typeof value === "object") for (const child of Object.values(value)) assertMetadataOnly(child, depth + 1);
 }

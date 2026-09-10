@@ -1,8 +1,9 @@
+import { apiHandler } from "@/lib/api-handler";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
@@ -41,3 +42,5 @@ export async function GET(request: NextRequest) {
     })),
   });
 }
+
+export const GET = apiHandler(handleGET);
