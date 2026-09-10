@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export async function renderPdfPages(bytes:Uint8Array,maxPages=3,scale=2.2):Promise<Buffer[]>{
-  const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask=pdfjs.getDocument({data:bytes.slice(),disableFontFace:true,useSystemFonts:false,standardFontDataUrl:dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json")).replace(/\\/g,"/")+"/standard_fonts/",verbosity:0});
   try{
     const pdf=await loadingTask.promise;

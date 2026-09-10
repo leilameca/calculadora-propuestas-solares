@@ -1,3 +1,5 @@
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+
 export type PdfTextItem = {
   str: string;
   transform: number[];
@@ -33,7 +35,6 @@ export function groupItemsIntoLines(items: PdfTextItem[]): string[] {
 }
 
 export async function extractPdfTextLayers(bytes: Uint8Array): Promise<{ text: string; layoutText: string }> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask = pdfjs.getDocument({
     data: bytes.slice(),
     disableFontFace: true,
