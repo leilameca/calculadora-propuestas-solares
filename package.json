@@ -22,6 +22,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1129.0",
     "@napi-rs/canvas": "^1.0.8",
     "@prisma/client": "6.12.0",
+    "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
     "docx": "^9.5.1",

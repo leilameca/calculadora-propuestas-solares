@@ -14,6 +14,17 @@ StoredFile guarda companyId, proveedor, key opaca, nombre saneado, tamaño, MIME
 
 Mantener el mismo bucket/endpoint para los objetos existentes. Cambiar de proveedor exige copiar y verificar objetos y actualizar metadata explícitamente. Habilitar cifrado, backups/versionado y políticas de mínimo privilegio en el servicio elegido. Límites: 4 MiB por archivo, formatos PDF/PNG/JPEG/WebP, firma/decodificación de imágenes y 20 millones de píxeles; para PDF, apertura válida de 1–20 páginas y rechazo de acciones automáticas, JavaScript y archivos incrustados detectables. La validación no sustituye un antivirus; anexos PDF se importan como páginas, no se ejecutan. El bucket no debe servir contenido activo públicamente.
 
+### Vercel Blob privado
+
+En Vercel puede usarse STORAGE_PROVIDER="vercel-blob". El adaptador VercelBlobObjectStorage implementa el mismo contrato que S3 y usa un Blob store privado. Vercel crea BLOB_READ_WRITE_TOKEN como secreto al conectar el store; no debe copiarse al repositorio. Las descargas normales siguen pasando por /api/files/:id, que comprueba sesión, companyId, tamaño y SHA-256 antes de responder. Las URLs del store privado no son públicas.
+
+Para producción en Vercel:
+
+- Crear/conectar un Blob store con acceso private.
+- Definir STORAGE_PROVIDER="vercel-blob".
+- Confirmar que Vercel inyectó BLOB_READ_WRITE_TOKEN.
+- Volver a desplegar para que las funciones reciban las variables.
+
 ## Secuencia segura
 
 1. Respaldar PostgreSQL y verificar restauración. Preparar bucket privado y credenciales. Probar primero en una copia de staging.

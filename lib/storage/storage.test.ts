@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { LocalObjectStorage } from "./local";
+import { VercelBlobObjectStorage } from "./vercel-blob";
 import { decodeDataUrl, safeFileName, validateFile } from "./validation";
 import { getStorage } from "./index";
 
@@ -32,5 +33,13 @@ describe("private storage", () => {
     await expect(validateFile(png, "image/jpeg")).rejects.toThrow();
     await expect(validateFile(png, "image/png")).resolves.toBeUndefined();
     expect(safeFileName("../factura\r\n.pdf")).not.toMatch(/[/\r\n]/);
+  });
+  it("selects private Vercel Blob only when its server credential exists", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("STORAGE_PROVIDER", "vercel-blob");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
+    expect(getStorage()).toBeInstanceOf(VercelBlobObjectStorage);
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    expect(() => getStorage()).toThrow("Vercel Blob privado");
   });
 });
