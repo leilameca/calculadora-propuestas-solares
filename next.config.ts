@@ -7,8 +7,7 @@ const nextConfig: NextConfig = {
     "/api/ocr": [
       "./node_modules/pdfjs-dist/legacy/build/**/*",
       "./node_modules/pdfjs-dist/standard_fonts/**/*",
-      "./node_modules/tesseract.js/src/worker-script/**/*",
-      "./node_modules/tesseract.js/src/worker/**/*",
+      "./node_modules/tesseract.js/src/**/*",
       "./node_modules/tesseract.js-core/**/*",
     ],
   },
