@@ -44,7 +44,7 @@ El diagnóstico detallado con archivos, causa, solución, riesgo y dependencias 
 
 Las pruebas tenant usan dobles de Prisma para ejercitar handlers, sesiones y filtros de compañía; la lectura/exportación de los cuatro registros usa la BD disponible real. No equivalen a pruebas de escritura entre empresas contra staging. La interfaz de confirmación se implementó, pero no se pudo realizar su recorrido interactivo: el navegador conectado no tenía instancias disponibles.
 
-Se intentó el renderer de la guía DOCX y faltaba pdf2image; Word se bloqueó. Se verificó la firma del instalador LibreOffice ya presente y se extrajo a una carpeta temporal para renderizar, sin añadirlo al proyecto. Docker no pudo iniciar. Un servidor local de Next bloqueó la DLL de Prisma durante instalación/build; se detuvo para regenerar y se recuperó la verificación. Los comandos finales anteriores pasan.
+Se intentó el renderer de la guía DOCX y faltaba pdf2image; Word se bloqueó. Se verificó la firma del instalador LibreOffice ya presente y se extrajo a una carpeta temporal para renderizar, sin añadirlo al proyecto. Docker no pudo iniciar. Un servidor local de Next bloqueó la DLL de Prisma durante instalación/build; se detuvo para regenerar y se recuperó la verificación. Los comandos finales anteriores pasan. El servidor local se reinició y /login respondió HTTP 200. Next.js generó AGENTS.md y CLAUDE.md con su guía local; se conservaron en un commit separado.
 
 ## Problemas pendientes
 
@@ -117,6 +117,8 @@ Primero staging multiempresa reproducible y CI con PostgreSQL/S3 de pruebas. Des
 
 ## Archivos creados
 
+- `AGENTS.md`
+- `CLAUDE.md`
 - `app/api/files/[id]/route.ts`
 - `components/invoice-review.tsx`
 - `docs/INVOICE_READER.md`
