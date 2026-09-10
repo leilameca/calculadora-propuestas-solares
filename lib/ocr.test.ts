@@ -28,12 +28,12 @@ describe("parser OCR de facturas eléctricas",()=>{
     expect(result.recognized).toBe(true);
     expect(result.consumption.map((item)=>item.kwh)).toEqual([410,430,420]);
   });
-  it("interpreta la tabla real de histórico de una factura MTD1N de EDENORTE",()=>{
+  it("interpreta la tabla industrial sint?tica de histórico de una factura MTD1N de EDENORTE",()=>{
     const text=`Edenorte Dominicana, S.A.
-CONTRATO : 7471365
-TITULAR DE PAGO............: CCA CIBAO CENTRAL DE, ALMACENAMIENTO SRL
-DIRECCION SUMINISTRO......: AVDA PADRE LAS CASAS 1 ENCF: E310000846224
-NOMBRE O RAZON SOCIAL: CCA CIBAO CENTRAL DE, ALMACENAMIENTO SRL Itiner: 0002
+CONTRATO : 9000001
+TITULAR DE PAGO............: CLIENTE FICTICIO NORTE SRL
+DIRECCION SUMINISTRO......: AVDA EJEMPLO 1 ENCF: E310000000001
+NOMBRE O RAZON SOCIAL: CLIENTE FICTICIO NORTE SRL Itiner: 0002
 TARIFA..............: MTD1N
 HISTORICO DE CONSUMOS
 Mes Csmo Pot. kWh
@@ -53,9 +53,9 @@ Ago 2026 81000 258.000
 PAGUE ANTES DE 04/09/2026`;
     const result=parseElectricInvoice(text);
     expect(result.recognized).toBe(true);
-    expect(result.customerName).toBe("CCA CIBAO CENTRAL DE, ALMACENAMIENTO SRL");
-    expect(result.nic).toBe("7471365");
-    expect(result.address).toBe("AVDA PADRE LAS CASAS 1");
+    expect(result.customerName).toBe("CLIENTE FICTICIO NORTE SRL");
+    expect(result.contractNumber).toBe("9000001");
+    expect(result.address).toBe("AVDA EJEMPLO 1");
     expect(result.tariff).toBe("MTD-1");
     expect(result.consumption).toHaveLength(12);
     expect(result.consumption[0]).toEqual({month:9,year:2025,kwh:56400});
@@ -66,13 +66,13 @@ PAGUE ANTES DE 04/09/2026`;
 CONTRATO : NOMBRE O RAZON SOCIAL: Oficina No. Factura FECHA EMISION
 HISTORICO DE CONSUMOS
 Mes Mes Csmo Pot. kWh
-CLIENTE DE PRUEBA 5113677 CLIENTE DE PRUEBA 08/08/2026
+CLIENTE DE PRUEBA 9000002 CLIENTE DE PRUEBA 08/08/2026
 Ago 2025 Sep Oct Nov Dic Ene Feb Mar Abr May Jun Jul Ago 2026
 331 389 351 287 230 323 283 252 278 317 333 351 371
 CALLE PRINCIPAL 69 Baja 120 Monofásica BTS-1`;
     const result=parseElectricInvoice(text);
     expect(result.recognized).toBe(true);
-    expect(result.nic).toBe("5113677");
+    expect(result.contractNumber).toBe("9000002");
     expect(result.tariff).toBe("BTS-1");
     expect(result.consumption).toHaveLength(12);
     expect(result.consumption[0]).toEqual({month:9,year:2025,kwh:389});
