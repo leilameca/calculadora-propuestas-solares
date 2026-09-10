@@ -105,7 +105,7 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   const quoteTax=input.company.itbisEnabled===false?0:(input.company.itbisRate||0.18)*quoteSubtotal;
   const quoteTotal=quoteSubtotal+quoteTax;
   const quoteTotalDop=quoteTotal*(input.project.exchangeRate||0);
-  const quotePricePerKwp=input.result.installedKwp>0?quoteTotal/input.result.installedKwp:0;
+  const quotePricePerWp=input.result.installedKwp>0?quoteTotal/(input.result.installedKwp*1000):0;
   const children:(Paragraph|Table)[]=[];
 
   // 1. Portada - proposal_centerpiece adapted to dynamic brand identity.

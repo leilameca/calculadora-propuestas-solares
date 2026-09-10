@@ -1,271 +1,523 @@
-import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb, type PDFImage, type RGB } from "pdf-lib";
-import { MONTHS } from "./solar-calculator";
-import type { ProposalDocumentInput } from "./docx-builder";
+import { PDFDocument, PDFFont, PDFPage, PDFPageDrawTextOptions, rgb, StandardFonts } from "pdf-lib";
+import { MONTHS, type SolarCalculationResult } from "./solar-calculator";
 
-const PAGE_W = 612;
-const PAGE_H = 792;
-const MARGIN = 71;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-const INK = rgb(15 / 255, 23 / 255, 42 / 255);
-const MUTED = rgb(100 / 255, 116 / 255, 139 / 255);
-const LIGHT = rgb(243 / 255, 244 / 255, 246 / 255);
-const WHITE = rgb(1, 1, 1);
-
-type Fonts = { regular: PDFFont; bold: PDFFont; display: PDFFont; displayItalic: PDFFont };
-type Brand = { primary: RGB; secondary: RGB; accent: RGB };
-
-function color(value: string | undefined, fallback: string): RGB {
-  const hex = (value || fallback).replace("#", "");
-  const safe = /^[0-9a-f]{6}$/i.test(hex) ? hex : fallback;
-  return rgb(parseInt(safe.slice(0, 2), 16) / 255, parseInt(safe.slice(2, 4), 16) / 255, parseInt(safe.slice(4, 6), 16) / 255);
-}
-
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const result: string[] = [];
-  for (const paragraph of String(text).split("\n")) {
-    const words = paragraph.split(/\s+/).filter(Boolean);
-    let line = "";
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(next, size) <= maxWidth) line = next;
-      else { if (line) result.push(line); line = word; }
-    }
-    result.push(line);
-  }
-  return result;
-}
-
-function paragraph(page: PDFPage, text: string, x: number, y: number, options: { font: PDFFont; size?: number; color?: RGB; width?: number; lineHeight?: number } ): number {
-  const size = options.size ?? 10;
-  const lineHeight = options.lineHeight ?? size * 1.4;
-  const lines = wrap(text, options.font, size, options.width ?? CONTENT_W);
-  lines.forEach((line, index) => page.drawText(line, { x, y: y - index * lineHeight, size, font: options.font, color: options.color ?? INK }));
-  return y - lines.length * lineHeight;
-}
-
-function fitText(text: string, font: PDFFont, size: number, maxWidth: number): string {
-  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
-  let value = text;
-  while (value.length > 3 && font.widthOfTextAtSize(`${value}...`, size) > maxWidth) value = value.slice(0, -1);
-  return `${value}...`;
-}
-
-async function embedDataImage(pdf: PDFDocument, dataUrl?: string) {
-  if (!dataUrl) return null;
-  const match = dataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
-  if (!match) return null;
-  const bytes = Buffer.from(match[2], "base64");
-  return match[1].toLowerCase() === "png" ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
-}
-
-function drawLogoOrName(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, logo?: PDFImage | null) {
-  if (logo) {
-    const size = logo.scaleToFit(105, 28);
-    page.drawImage(logo, { x: MARGIN, y: PAGE_H - 52, width: size.width, height: size.height });
-  } else page.drawText(input.company.name, { x: MARGIN, y: PAGE_H - 43, size: 10, font: fonts.bold, color: brand.primary });
-}
-
-function header(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, pageNumber: number, logo?: PDFImage | null) {
-  drawLogoOrName(page, input, fonts, brand, logo);
-  const contact = [input.company.phone, input.company.email].filter(Boolean).join("  |  ");
-  const contactWidth = fonts.regular.widthOfTextAtSize(contact, 8);
-  page.drawText(contact, { x: Math.max(MARGIN, PAGE_W - MARGIN - contactWidth), y: PAGE_H - 43, size: 8, font: fonts.regular, color: MUTED });
-  page.drawLine({ start: { x: MARGIN, y: PAGE_H - 52 }, end: { x: PAGE_W - MARGIN, y: PAGE_H - 52 }, thickness: 1.2, color: brand.primary });
-  footer(page, input, fonts, brand, pageNumber);
-}
-
-function footer(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, pageNumber: number, dark = false) {
-  const footerColor = dark ? rgb(.7, .76, .86) : MUTED;
-  page.drawLine({ start: { x: MARGIN, y: 42 }, end: { x: PAGE_W - MARGIN, y: 42 }, thickness: .7, color: dark ? rgb(.2, .27, .38) : brand.secondary });
-  page.drawText(`RNC ${input.company.rnc || "N/D"}  |  Vigencia: ${input.company.proposalValidityDays || 15} días`, { x: MARGIN, y: 28, size: 7.5, font: fonts.regular, color: footerColor });
-  const pageText = String(pageNumber).padStart(2, "0");
-  page.drawText(pageText, { x: PAGE_W - MARGIN - fonts.regular.widthOfTextAtSize(pageText, 7.5), y: 28, size: 7.5, font: fonts.regular, color: footerColor });
-}
-
-function title(page: PDFPage, index: number, text: string, fonts: Fonts, brand: Brand) {
-  page.drawText(String(index).padStart(2, "0"), { x: MARGIN, y: 684, size: 26, font: fonts.displayItalic, color: brand.accent });
-  paragraph(page, text, MARGIN + 44, 686, { font: fonts.display, size: 24, width: CONTENT_W - 44, lineHeight: 25 });
-}
-
-function metric(page: PDFPage, x: number, y: number, width: number, height: number, value: string, label: string, fonts: Fonts, stroke: RGB, valueColor: RGB = INK) {
-  page.drawRectangle({ x, y, width, height, borderColor: stroke, borderWidth: 1, color: WHITE });
-  const safeValue = fitText(value, fonts.display, 18, width - 20);
-  page.drawText(safeValue, { x: x + (width - fonts.display.widthOfTextAtSize(safeValue, 18)) / 2, y: y + height - 34, size: 18, font: fonts.display, color: valueColor });
-  const safeLabel = fitText(label.toUpperCase(), fonts.bold, 7.5, width - 16);
-  page.drawText(safeLabel, { x: x + (width - fonts.bold.widthOfTextAtSize(safeLabel, 7.5)) / 2, y: y + 18, size: 7.5, font: fonts.bold, color: MUTED });
-}
-
-function drawChart(page: PDFPage, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, x: number, y: number, width: number, height: number) {
-  page.drawRectangle({ x, y, width, height, borderColor: rgb(.86, .89, .93), borderWidth: 1, color: WHITE });
-  page.drawText("GENERACIÓN VS. CONSUMO - KWH / MES", { x: x + 18, y: y + height - 24, size: 9, font: fonts.bold, color: INK });
-  const values = [...input.consumption, ...input.result.monthlyGeneration];
-  const max = Math.max(...values, 1) * 1.12;
-  const chartX = x + 35, chartY = y + 34, chartW = width - 50, chartH = height - 72;
-  for (let line = 0; line <= 4; line += 1) {
-    const lineY = chartY + (chartH * line) / 4;
-    page.drawLine({ start: { x: chartX, y: lineY }, end: { x: chartX + chartW, y: lineY }, thickness: .5, color: rgb(.9, .92, .95) });
-  }
-  const groupWidth = chartW / 12;
-  input.consumption.forEach((consumption, index) => {
-    const solar = input.result.monthlyGeneration[index];
-    const barWidth = Math.max(3, groupWidth * .28);
-    const left = chartX + index * groupWidth + groupWidth * .16;
-    page.drawRectangle({ x: left, y: chartY, width: barWidth, height: Math.max(1, solar / max * chartH), color: brand.primary });
-    page.drawRectangle({ x: left + barWidth + 2, y: chartY, width: barWidth, height: Math.max(1, consumption / max * chartH), color: brand.accent });
-    const month = MONTHS[index].slice(0, 3).toUpperCase();
-    page.drawText(month, { x: chartX + index * groupWidth + 2, y: chartY - 13, size: 5.5, font: fonts.regular, color: MUTED });
-  });
-}
-
-function attachmentBytes(dataUrl: string): Uint8Array {
-  const encoded = dataUrl.split(",", 2)[1];
-  if (!encoded) throw new Error("Documento adjunto inválido.");
-  return new Uint8Array(Buffer.from(encoded, "base64"));
-}
-
-async function appendEquipmentAttachments(pdf: PDFDocument, input: ProposalDocumentInput, fonts: Fonts, brand: Brand, logo?: PDFImage | null) {
-  if (!input.attachments?.length) return;
-  let annexPage = pdf.addPage([PAGE_W, PAGE_H]);
-  header(annexPage, input, fonts, brand, pdf.getPageCount(), logo);
-  title(annexPage, 7, "Anexos Técnicos de Equipos", fonts, brand);
-  paragraph(annexPage, "Los siguientes datasheets y certificados corresponden a los equipos seleccionados para esta propuesta.", MARGIN, 615, { font: fonts.regular, size: 11, width: CONTENT_W, lineHeight: 16 });
-  let annexY = 555;
-  for (const attachment of input.attachments) {
-    annexPage.drawRectangle({ x: MARGIN, y: annexY - 38, width: CONTENT_W, height: 48, color: LIGHT });
-    annexPage.drawText(attachment.kind === "DATASHEET" ? "DATASHEET" : "CERTIFICADO", { x: MARGIN + 14, y: annexY - 10, size: 8, font: fonts.bold, color: brand.primary });
-    annexPage.drawText(fitText(`${attachment.equipmentName} · ${attachment.fileName}`, fonts.regular, 9.5, CONTENT_W - 28), { x: MARGIN + 14, y: annexY - 27, size: 9.5, font: fonts.regular, color: INK });
-    annexY -= 60;
-  }
-  footer(annexPage, input, fonts, brand, pdf.getPageCount());
-
-  for (const attachment of input.attachments) {
-    const bytes = attachmentBytes(attachment.dataUrl);
-    if (attachment.mimeType === "application/pdf") {
-      const source = await PDFDocument.load(bytes);
-      const copied = await pdf.copyPages(source, source.getPageIndices());
-      copied.forEach((sourcePage) => pdf.addPage(sourcePage));
-      continue;
-    }
-    annexPage = pdf.addPage([PAGE_W, PAGE_H]);
-    const image = attachment.mimeType === "image/png" ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
-    const size = image.scaleToFit(CONTENT_W, 625);
-    annexPage.drawText(`${attachment.kind === "DATASHEET" ? "DATASHEET" : "CERTIFICADO"} · ${attachment.equipmentName}`, { x: MARGIN, y: 742, size: 12, font: fonts.bold, color: brand.primary });
-    annexPage.drawImage(image, { x: MARGIN + (CONTENT_W - size.width) / 2, y: 80 + (625 - size.height) / 2, width: size.width, height: size.height });
-  }
-}
-
-async function appendInvoice(pdf:PDFDocument,input:ProposalDocumentInput,fonts:Fonts,brand:Brand,logo?:PDFImage|null){
-  if(!input.invoice)return;
-  const bytes=attachmentBytes(input.invoice.dataUrl);
-  const intro=pdf.addPage([PAGE_W,PAGE_H]);header(intro,input,fonts,brand,pdf.getPageCount(),logo);title(intro,7,"Factura del Cliente",fonts,brand);paragraph(intro,`Documento de soporte utilizado para el análisis de consumo: ${input.invoice.name}.`,MARGIN,615,{font:fonts.regular,size:11,lineHeight:16});
-  if(input.invoice.mimeType==="application/pdf"){const source=await PDFDocument.load(bytes);const copied=await pdf.copyPages(source,source.getPageIndices());copied.forEach(sourcePage=>pdf.addPage(sourcePage));return;}
-  const page=pdf.addPage([PAGE_W,PAGE_H]),image=input.invoice.mimeType==="image/png"?await pdf.embedPng(bytes):await pdf.embedJpg(bytes),size=image.scaleToFit(CONTENT_W,650);page.drawImage(image,{x:MARGIN+(CONTENT_W-size.width)/2,y:70+(650-size.height)/2,width:size.width,height:size.height});
-}
-
-export async function buildProposalPdf(input: ProposalDocumentInput): Promise<Uint8Array> {
-  if (input.consumption.length !== 12) throw new Error("La propuesta requiere 12 consumos mensuales.");
-  const pdf = await PDFDocument.create();
-  const fonts: Fonts = {
-    regular: await pdf.embedFont(StandardFonts.Helvetica), bold: await pdf.embedFont(StandardFonts.HelveticaBold),
-    display: await pdf.embedFont(StandardFonts.TimesRoman), displayItalic: await pdf.embedFont(StandardFonts.TimesRomanItalic),
+export interface PdfProposalInput {
+  company: {
+    name: string;
+    rnc?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    slogan?: string;
+    logoBase64?: string;
+    coverImageBase64?: string;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    proposalValidityDays?: number;
   };
-  const brand: Brand = { primary: color(input.company.primaryColor, "0F4C5C"), secondary: color(input.company.secondaryColor, "2F7D32"), accent: color(input.company.accentColor, "F2A900") };
-  const coverImage = await embedDataImage(pdf, input.company.coverImageBase64);
-  const backImage = await embedDataImage(pdf, input.company.backCoverImageBase64 || input.company.coverImageBase64);
-  const logo = await embedDataImage(pdf, input.company.logoBase64);
-  const customerLogo=await embedDataImage(pdf,input.customer.logoBase64);
+  customer: { name: string; nic?: string; address?: string };
+  project: { name: string; city: string; utility: string; tariff: string; systemType: string; panelWatts: number; inverter?: string };
+  consumption: number[];
+  result: SolarCalculationResult;
+  quoteItems: Array<{ name: string; description?: string; quantity?: number; amountUsd: number }>;
+  proposalNumber?: string;
+  date?: string;
+}
+
+const PAGE_W = 612; // Letter width (8.5in)
+const PAGE_H = 792; // Letter height (11in)
+const MARGIN = 48;
+const CONTENT_W = PAGE_W - MARGIN * 2;
+
+function hexToRgb(hex: string, fallback = "0F4C5C") {
+  const clean = (hex || "").replace("#", "");
+  const value = /^[0-9A-Fa-f]{6}$/.test(clean) ? clean : fallback;
+  return rgb(parseInt(value.slice(0, 2), 16) / 255, parseInt(value.slice(2, 4), 16) / 255, parseInt(value.slice(4, 6), 16) / 255);
+}
+
+function drawText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size: number, color = rgb(0.09, 0.13, 0.2), options: Partial<PDFPageDrawTextOptions> = {}) {
+  page.drawText(text, { x, y, font, size, color, ...options });
+}
+
+function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, color: ReturnType<typeof rgb>) {
+  page.drawRectangle({ x, y, width: w, height: h, color });
+}
+
+function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, color: ReturnType<typeof rgb>, thickness = 1) {
+  page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color });
+}
+
+function formatUsd(v: number) {
+  return `US$ ${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDop(v: number) {
+  return `RD$ ${Math.round(v).toLocaleString("es-DO")}`;
+}
+
+function formatNum(v: number) {
+  return Math.round(v).toLocaleString("es-DO");
+}
+
+async function loadImage(pdf: PDFDocument, base64?: string) {
+  if (!base64) return null;
+  try {
+    const data = base64.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    if (base64.includes("image/png")) return await pdf.embedPng(bytes);
+    return await pdf.embedJpg(bytes);
+  } catch {
+    return null;
+  }
+}
+
+export async function buildProposalPdf(input: PdfProposalInput): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const helvetica = await pdf.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const helveticaOblique = await pdf.embedFont(StandardFonts.HelveticaOblique);
+
+  const primary = hexToRgb(input.company.primaryColor, "0F4C5C");
+  const secondary = hexToRgb(input.company.secondaryColor, "2F7D32");
+  const accent = hexToRgb(input.company.accentColor, "F2A900");
+  const ink = rgb(0.09, 0.13, 0.2);
+  const muted = rgb(0.4, 0.45, 0.55);
+  const light = rgb(0.95, 0.96, 0.98);
+  const white = rgb(1, 1, 1);
+
   const date = input.date || new Intl.DateTimeFormat("es-DO", { dateStyle: "long" }).format(new Date());
+  const quoteSubtotal = input.quoteItems.reduce((sum, item) => sum + item.amountUsd, 0);
+  const quoteTax = input.result.costUsd > 0 ? input.result.itbisUsd * (quoteSubtotal / input.result.costUsd) : 0;
+  const quoteTotalDop = (quoteSubtotal + quoteTax) * (input.project.exchangeRate || 0);
+  const quotePricePerWp = input.result.installedKwp > 0 ? (quoteSubtotal + quoteTax) / (input.result.installedKwp * 1000) : 0;
+  const quoteTotal = quoteSubtotal + quoteTax;
+  const logo = await loadImage(pdf, input.company.logoBase64);
+  const cover = await loadImage(pdf, input.company.coverImageBase64);
 
-  // 1. Portada
-  let page = pdf.addPage([PAGE_W, PAGE_H]);
-  drawLogoOrName(page, input, fonts, brand, logo);
-  const coverContact = [input.company.phone, input.company.email].filter(Boolean).join("  |  ");
-  page.drawText(fitText(coverContact, fonts.regular, 8, 220), { x: 321, y: 745, size: 8, font: fonts.regular, color: MUTED });
-  if (coverImage) page.drawImage(coverImage, { x: MARGIN, y: 515, width: CONTENT_W, height: 190 });
-  else page.drawRectangle({ x: MARGIN, y: 515, width: CONTENT_W, height: 190, color: brand.primary });
-  page.drawText("PROPUESTA", { x: MARGIN, y: 468, size: 34, font: fonts.display, color: INK });
-  page.drawText("ENERGÉTICA", { x: MARGIN, y: 430, size: 34, font: fonts.displayItalic, color: brand.secondary });
-  page.drawText("SISTEMA SOLAR FOTOVOLTAICO", { x: MARGIN, y: 402, size: 8, font: fonts.bold, color: brand.accent });
-  if(customerLogo){const size=customerLogo.scaleToFit(80,45);page.drawImage(customerLogo,{x:PAGE_W-MARGIN-size.width,y:392,width:size.width,height:size.height});}
-  page.drawRectangle({ x: MARGIN, y: 265, width: CONTENT_W, height: 105, borderColor: rgb(.85, .88, .93), borderWidth: 1, color: WHITE });
-  const meta = [["PREPARADO PARA", input.customer.name], ["CAPACIDAD", `${input.result.installedKwp.toFixed(2)} kWp`], ["NIC", input.customer.nic || "N/D"], ["UBICACIÓN", input.customer.address || input.project.city], ["FECHA", date], ["PROPUESTA", input.proposalNumber || "BORRADOR"]];
-  meta.forEach(([label, value], index) => { const col = index % 3, row = Math.floor(index / 3); const x = MARGIN + 18 + col * (CONTENT_W / 3); const y = 340 - row * 48; page.drawText(label, { x, y, size: 7, font: fonts.bold, color: MUTED }); page.drawText(fitText(value, fonts.bold, 10, CONTENT_W / 3 - 24), { x, y: y - 17, size: 10, font: fonts.bold, color: INK }); });
-  const gap = 10, cardW = (CONTENT_W - gap * 2) / 3;
-  metric(page, MARGIN, 145, cardW, 88, `${Math.round(input.result.annualGeneration).toLocaleString("es-DO")}`, "kWh generados / año", fonts, brand.primary);
-  metric(page, MARGIN + cardW + gap, 145, cardW, 88, "25+", "años de vida útil", fonts, brand.secondary);
-  metric(page, MARGIN + (cardW + gap) * 2, 145, cardW, 88, `RD$ ${Math.round(input.result.annualSavingsDop).toLocaleString("es-DO")}`, "ahorro anual estimado", fonts, brand.accent, brand.accent);
-  footer(page, input, fonts, brand, 1);
+  // ============ PÁGINA 1: PORTADA ============
+  const page1 = pdf.addPage([PAGE_W, PAGE_H]);
 
-  // 2. Descripción y regulación
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 2, logo); title(page, 1, "Descripción del Proyecto y Objetivos", fonts, brand);
-  let y = 606;
-  y = paragraph(page, input.proposalText?.slice(0,700)||`El proyecto plantea una solución de abastecimiento energético para ${input.customer.name}, basada en una generación estimada de ${Math.round(input.result.annualGeneration / 12).toLocaleString("es-DO")} kWh/mes y ${Math.round(input.result.annualGeneration).toLocaleString("es-DO")} kWh/año mediante un sistema solar fotovoltaico de alta eficiencia.`, MARGIN, y, { font: fonts.regular, size: 11, lineHeight: 17 });
-  page.drawText("OBJETIVOS DEL PROYECTO", { x: MARGIN, y: y - 20, size: 8, font: fonts.bold, color: MUTED }); y -= 45;
-  [["Eficiencia energética", "Reducir el costo energético con generación distribuida."], ["Sostenibilidad", "Disminuir la huella de carbono con energía renovable."], ["Estabilidad", "Reducir la exposición a variaciones tarifarias."], ["Monitoreo", "Dar seguimiento al desempeño y a la producción."]].forEach(([heading, copy], index) => { const col = index % 2, row = Math.floor(index / 2); const bx = MARGIN + col * (CONTENT_W / 2); const by = y - row * 66; page.drawLine({ start: { x: bx, y: by + 7 }, end: { x: bx, y: by - 35 }, thickness: 1.2, color: brand.accent }); page.drawText(heading, { x: bx + 12, y: by, size: 10, font: fonts.bold, color: INK }); paragraph(page, copy, bx + 12, by - 17, { font: fonts.regular, size: 8.5, color: MUTED, width: CONTENT_W / 2 - 24, lineHeight: 11 }); });
-  page.drawRectangle({ x: MARGIN, y: 300, width: CONTENT_W, height: 62, color: LIGHT }); page.drawLine({ start: { x: MARGIN + 16, y: 348 }, end: { x: MARGIN + 16, y: 314 }, thickness: 2, color: brand.accent }); paragraph(page, `Importante. El promedio de consumo usado es ${Math.round(input.result.averageMonthlyConsumption).toLocaleString("es-DO")} kWh/mes, calculado con los meses efectivamente facturados seleccionados.`, MARGIN + 30, 339, { font: fonts.bold, size: 9, width: CONTENT_W - 45, lineHeight: 13 });
-  page.drawRectangle({ x: MARGIN, y: 125, width: CONTENT_W, height: 145, borderColor: rgb(.84, .88, .93), borderWidth: 1, color: WHITE }); page.drawText("MARCO REGULATORIO - INYECCIÓN A LA RED", { x: MARGIN + 18, y: 245, size: 9, font: fonts.bold, color: INK }); paragraph(page, "Para clientes en tarifas BTS-1 y BTS-2 de EDENORTE, EDESUR o EDEESTE, la energía inyectada a la red está sujeta al cargo regulatorio aplicable del 25%. La valorización final depende del esquema de medición, los acuerdos de interconexión y la regulación vigente al momento de aprobación.", MARGIN + 18, 221, { font: fonts.regular, size: 9, width: CONTENT_W - 36, lineHeight: 14 });
+  // Fondo superior con color primario
+  drawRect(page1, 0, PAGE_H - 260, PAGE_W, 260, primary);
 
-  // 3. Cotización
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 3, logo); title(page, 2, "Inversión y Cotización del Sistema", fonts, brand);
-  page.drawRectangle({ x: MARGIN, y: 585, width: CONTENT_W, height: 54, color: brand.primary }); paragraph(page, `Sistema solar de ${input.result.installedKwp.toFixed(2)} kWp > ${Math.round(input.result.annualGeneration / 12).toLocaleString("es-DO")} kWh/mes | ${Math.round(input.result.annualGeneration).toLocaleString("es-DO")} kWh/año`, MARGIN + 18, 614, { font: fonts.bold, size: 10, color: WHITE, width: CONTENT_W - 36, lineHeight: 13 });
-  const tableTop = 545, rowH = 32, col1 = 245, col2 = 100, col3 = CONTENT_W - col1 - col2;
-  page.drawText("CONCEPTO", { x: MARGIN + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED }); page.drawText("CANT.", { x: MARGIN + col1 + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED }); page.drawText("MONTO USD", { x: MARGIN + col1 + col2 + 8, y: tableTop, size: 7.5, font: fonts.bold, color: MUTED });
-  let rowY = tableTop - 18;
-  input.quoteItems.forEach((item, index) => { page.drawRectangle({ x: MARGIN, y: rowY - rowH + 8, width: CONTENT_W, height: rowH, color: index % 2 ? LIGHT : WHITE, borderColor: rgb(.87, .89, .92), borderWidth: .5 }); page.drawText(fitText(item.name, fonts.regular, 8.5, col1 - 16), { x: MARGIN + 8, y: rowY - 11, size: 8.5, font: fonts.regular, color: INK }); page.drawText(String(item.quantity || 1), { x: MARGIN + col1 + 8, y: rowY - 11, size: 8.5, font: fonts.regular, color: INK }); const amount = item.amountUsd===0?"INCLUIDO":`US$ ${item.amountUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; page.drawText(amount, { x: PAGE_W - MARGIN - 8 - fonts.bold.widthOfTextAtSize(amount, 8.5), y: rowY - 11, size: 8.5, font: fonts.bold, color:item.amountUsd===0?brand.secondary:INK }); rowY -= rowH; });
-  const subtotal = input.quoteItems.reduce((sum, item) => sum + item.amountUsd, 0);
-  const tax = input.company.itbisEnabled === false ? 0 : subtotal * Number(input.company.itbisRate || 0);
-  const total = subtotal + tax;
-  const totals: Array<[string, number, boolean]> = [["SUB-TOTAL", subtotal, false]];
-  if (tax > 0) totals.push(["ITBIS", tax, false]);
-  totals.push(["INVERSIÓN TOTAL", total, true], ["PRECIO POR kWp", input.result.pricePerWpUsd*1000, false]);
-  totals.forEach(([label, amount, highlight]) => { page.drawRectangle({ x: MARGIN, y: rowY - 28, width: CONTENT_W, height: 32, color: highlight ? brand.primary : LIGHT }); page.drawText(label, { x: MARGIN + 10, y: rowY - 16, size: highlight ? 10 : 8.5, font: fonts.bold, color: highlight ? WHITE : MUTED }); const value = label === "PRECIO POR kWp" ? `US$ ${amount.toFixed(2)} / kWp` : `US$ ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; page.drawText(value, { x: PAGE_W - MARGIN - 10 - fonts.bold.widthOfTextAtSize(value, highlight ? 10 : 8.5), y: rowY - 16, size: highlight ? 10 : 8.5, font: fonts.bold, color: highlight ? WHITE : INK }); rowY -= 34; });
-  paragraph(page, "Equipos sujetos a disponibilidad del fabricante. Todo cambio de alcance debe cotizarse por escrito.", MARGIN, Math.max(88, rowY - 25), { font: fonts.displayItalic, size: 8, color: MUTED });
+  // Logo o nombre
+  if (logo) {
+    const dims = logo.scale(0.5);
+    page1.drawImage(logo, { x: MARGIN, y: PAGE_H - 120, width: Math.min(dims.width, 120), height: Math.min(dims.height, 50) });
+  } else {
+    drawText(page1, input.company.name.toUpperCase(), MARGIN, PAGE_H - 90, helveticaBold, 18, white);
+  }
 
-  // 4. Análisis
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 4, logo); title(page, 3, "Análisis de Consumo y Producción Solar", fonts, brand);
-  metric(page, MARGIN, 545, cardW, 84, `RD$ ${Math.round(input.result.annualSavingsDop).toLocaleString("es-DO")}`, "ahorro anual", fonts, brand.accent, brand.accent);
-  metric(page, MARGIN + cardW + gap, 545, cardW, 84, `${Math.round(input.result.annualGeneration).toLocaleString("es-DO")}`, "generación anual kWh", fonts, brand.primary);
-  metric(page, MARGIN + (cardW + gap) * 2, 545, cardW, 84, `${input.result.co2AvoidedTons.toFixed(1)} t`, "CO2 evitado / año", fonts, brand.secondary, brand.secondary);
-  drawChart(page, input, fonts, brand, MARGIN, 195, CONTENT_W, 315);
-  page.drawRectangle({ x: MARGIN, y: 104, width: CONTENT_W, height: 58, color: LIGHT }); paragraph(page, "Importante. La generación estimada depende de las condiciones climáticas, sombras, suciedad, disponibilidad de red y tolerancias de los equipos.", MARGIN + 18, 139, { font: fonts.regular, size: 8.5, width: CONTENT_W - 36, lineHeight: 12 });
+  // Título principal
+  drawText(page1, "PROPUESTA", MARGIN, PAGE_H - 190, helveticaBold, 44, white);
+  drawText(page1, "ENERGÉTICA", MARGIN, PAGE_H - 230, helveticaBold, 44, accent);
+  drawText(page1, "SISTEMA SOLAR FOTOVOLTAICO", MARGIN, PAGE_H - 255, helvetica, 12, white);
 
-  // 5. Condiciones generales
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 5, logo); title(page, 4, "Condiciones Generales", fonts, brand);
-  const conditions = ["Los pagos se realizan en USD o DOP a la tasa de venta acordada o a la referencia del Banco Central del día.", "Los sistemas On-Grid dejan de producir cuando se interrumpe el suministro eléctrico, salvo que exista respaldo compatible.", "La producción es una estimación de ingeniería basada en consumos, irradiancia, pérdidas y parámetros declarados.", "Equipos sujetos a disponibilidad; cualquier sustitución debe ser técnicamente equivalente o superior.", "Obras civiles, refuerzos de techo, permisos y cargos de terceros se incluyen solo cuando estén descritos."];
-  y = 595; conditions.forEach((copy, index) => { const fill = index % 2 ? WHITE : LIGHT; page.drawRectangle({ x: MARGIN, y: y - 52, width: CONTENT_W, height: 58, color: fill }); page.drawRectangle({ x: MARGIN, y: y - 52, width: 42, height: 58, color: index % 2 ? brand.secondary : brand.primary }); page.drawText(String(index + 1).padStart(2, "0"), { x: MARGIN + 13, y: y - 25, size: 12, font: fonts.bold, color: WHITE }); paragraph(page, copy, MARGIN + 56, y - 12, { font: fonts.regular, size: 9.5, width: CONTENT_W - 70, lineHeight: 14 }); y -= 72; });
+  // Imagen de portada
+  if (cover) {
+    const coverW = CONTENT_W;
+    const coverH = 180;
+    const coverY = PAGE_H - 260 - coverH - 20;
+    page1.drawImage(cover, { x: MARGIN, y: coverY, width: coverW, height: coverH });
+    drawRect(page1, MARGIN, coverY, coverW, coverH, primary);
+  } else {
+    drawRect(page1, MARGIN, PAGE_H - 460, CONTENT_W, 180, light);
+    drawText(page1, "FOTOGRAFÍA AÉREA / PROYECTO", MARGIN + 20, PAGE_H - 400, helveticaBold, 14, primary);
+    drawText(page1, input.project.city, MARGIN + 20, PAGE_H - 380, helvetica, 12, muted);
+  }
 
-  // 6. Garantías
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 6, logo); title(page, 5, "Garantías del Sistema", fonts, brand);
-  const warrantyData = [["PANEL SOLAR", "Producto", "Según fabricante", "Rendimiento", "Hasta 25 años"], ["INVERSOR", "Producto", "Según modelo", "Cobertura", input.project.inverter || "Por seleccionar"], ["SOPORTE TÉCNICO", "Empresa", input.company.name, "Servicio", "Según contrato"]];
-  const warrantyW = (CONTENT_W - 20) / 3;
-  warrantyData.forEach((item, index) => { const x = MARGIN + index * (warrantyW + 10); page.drawRectangle({ x, y: 290, width: warrantyW, height: 315, borderColor: index === 1 ? brand.accent : rgb(.84, .88, .93), borderWidth: 1, color: WHITE }); page.drawText(item[0], { x: x + 16, y: 565, size: 10, font: fonts.bold, color: INK }); page.drawText(item[1].toUpperCase(), { x: x + 16, y: 510, size: 7, font: fonts.bold, color: MUTED }); paragraph(page, item[2], x + 16, 490, { font: fonts.display, size: 13, width: warrantyW - 32, lineHeight: 15 }); page.drawText(item[3].toUpperCase(), { x: x + 16, y: 420, size: 7, font: fonts.bold, color: MUTED }); paragraph(page, item[4], x + 16, 400, { font: fonts.display, size: 13, color: index === 1 ? brand.accent : brand.secondary, width: warrantyW - 32, lineHeight: 15 }); });
-  let equipmentY=160;for(const equipment of (input.selectedEquipment||[]).slice(0,3)){const equipmentLogo=await embedDataImage(pdf,equipment.logoUrl||undefined);if(equipmentLogo){const size=equipmentLogo.scaleToFit(70,32);page.drawImage(equipmentLogo,{x:MARGIN,y:equipmentY,width:size.width,height:size.height});}page.drawText(fitText(equipment.name,fonts.bold,8.5,250),{x:MARGIN+82,y:equipmentY+15,size:8.5,font:fonts.bold,color:INK});page.drawText(equipment.warrantyYears?`${equipment.warrantyYears} años de garantía`:"Garantía según fabricante",{x:MARGIN+82,y:equipmentY,size:8,font:fonts.regular,color:MUTED});equipmentY-=45;}
-  page.drawRectangle({ x: MARGIN, y: 205, width: CONTENT_W, height: 54, color: brand.primary }); page.drawText(`${input.company.name.toUpperCase()}  |  25+ AÑOS DE VIDA ÚTIL  |  SOPORTE TÉCNICO`, { x: MARGIN + 18, y: 226, size: 8.5, font: fonts.bold, color: WHITE });
+  // Bloque "PREPARADO PARA"
+  const prepY = PAGE_H - 500;
+  drawRect(page1, MARGIN, prepY - 20, CONTENT_W, 100, light);
+  drawText(page1, "PREPARADO PARA", MARGIN + 16, prepY + 60, helveticaBold, 11, secondary);
+  drawText(page1, input.customer.name, MARGIN + 16, prepY + 36, helveticaBold, 20, ink);
+  drawText(page1, input.customer.address || input.project.city, MARGIN + 16, prepY + 16, helvetica, 11, muted);
 
-  // 7. Fases
-  page = pdf.addPage([PAGE_W, PAGE_H]); header(page, input, fonts, brand, 7, logo); title(page, 6, "Fases del Proyecto", fonts, brand);
-  page.drawText("PROCESO DE IMPLEMENTACIÓN PASO A PASO", { x: MARGIN, y: 620, size: 8, font: fonts.bold, color: MUTED });
-  const phases = ["Aprobación distribuidora", "Instalación de equipos", "Visita de supervisión", "Acuerdos de interconexión", "Carta medidor bidireccional", "Instalación del medidor", "Arranque del sistema"];
-  phases.forEach((phase, index) => { const row = index < 4 ? 0 : 1; const col = row === 0 ? index : index - 4; const columns = row === 0 ? 4 : 3; const stepW = CONTENT_W / columns; const x = MARGIN + col * stepW + stepW / 2; const cy = row === 0 ? 515 : 365; page.drawCircle({ x, y: cy, size: 14, color: index === 3 || index === 6 ? brand.accent : brand.primary }); const n = String(index + 1); page.drawText(n, { x: x - fonts.bold.widthOfTextAtSize(n, 8) / 2, y: cy - 3, size: 8, font: fonts.bold, color: WHITE }); const lines = wrap(phase, fonts.bold, 8.5, stepW - 14); lines.forEach((line, lineIndex) => page.drawText(line, { x: x - fonts.bold.widthOfTextAtSize(line, 8.5) / 2, y: cy - 34 - lineIndex * 11, size: 8.5, font: fonts.bold, color: INK })); });
-  page.drawRectangle({ x: MARGIN, y: 175, width: CONTENT_W, height: 72, color: LIGHT }); paragraph(page, `${input.company.name} acompaña las gestiones aplicables ante CNE, la distribuidora y DGII, sujeto al alcance contratado y a los tiempos de respuesta de cada institución.`, MARGIN + 20, 218, { font: fonts.regular, size: 9, width: CONTENT_W - 40, lineHeight: 13 });
+  // Badges de métricas
+  const badgeY = prepY - 60;
+  const badgeW = (CONTENT_W - 20) / 2;
+  drawRect(page1, MARGIN, badgeY - 50, badgeW, 50, primary);
+  drawText(page1, `${formatNum(input.result.annualGeneration)} kWh`, MARGIN + 12, badgeY - 12, helveticaBold, 16, white);
+  drawText(page1, "GENERADOS / AÑO", MARGIN + 12, badgeY - 30, helvetica, 9, white);
 
-  // Factura y anexos técnicos, antes de la contraportada.
-  await appendInvoice(pdf,input,fonts,brand,logo);
-  await appendEquipmentAttachments(pdf, input, fonts, brand, logo);
+  drawRect(page1, MARGIN + badgeW + 20, badgeY - 50, badgeW, 50, accent);
+  drawText(page1, "25+", MARGIN + badgeW + 32, badgeY - 12, helveticaBold, 16, ink);
+  drawText(page1, "AÑOS DE VIDA ÚTIL", MARGIN + badgeW + 32, badgeY - 30, helvetica, 9, ink);
 
-  // Contraportada
-  page = pdf.addPage([PAGE_W, PAGE_H]); page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: INK });
-  if (backImage) page.drawImage(backImage, { x: 0, y: 455, width: PAGE_W, height: 337 });
-  page.drawText(input.company.name.toUpperCase(), { x: MARGIN, y: 410, size: 11, font: fonts.bold, color: WHITE });
-  page.drawText("TRANSFORMAMOS SU ENERGÍA", { x: MARGIN, y: 338, size: 27, font: fonts.display, color: WHITE });
-  page.drawText(input.company.slogan || "Ingeniería que transforma energía", { x: MARGIN, y: 302, size: 12, font: fonts.displayItalic, color: brand.accent });
-  page.drawRectangle({ x: MARGIN, y: 190, width: CONTENT_W, height: 70, color: rgb(.12, .17, .26) });
-  const contacts = [["TELÉFONO", input.company.phone || "N/D"], ["EMAIL", input.company.email || "N/D"], ["UBICACIÓN", input.company.address || "República Dominicana"]];
-  contacts.forEach(([label, value], index) => { const x = MARGIN + index * CONTENT_W / 3 + 16; page.drawText(label, { x, y: 235, size: 7, font: fonts.bold, color: brand.accent }); page.drawText(fitText(value, fonts.regular, 9, CONTENT_W / 3 - 28), { x, y: 214, size: 9, font: fonts.regular, color: WHITE }); });
-  footer(page, input, fonts, brand, pdf.getPageCount(), true);
+  // Pie de página
+  drawLine(page1, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page1, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page1, "01", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
 
-  pdf.setTitle(`Propuesta energética - ${input.customer.name}`);
-  pdf.setAuthor(input.company.name);
-  pdf.setSubject("Propuesta solar fotovoltaica");
+  // ============ PÁGINA 2: DESCRIPCIÓN ============
+  const page2 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page2, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page2, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page2, "01", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  let y = PAGE_H - 100;
+  drawText(page2, "Descripción del Proyecto y Objetivos", MARGIN, y, helveticaBold, 18, primary);
+  y -= 20;
+  drawText(page2, `Titular: ${input.customer.name}  |  Cuenta: ${input.customer.nic || "N/D"}  |  Fecha: ${date}`, MARGIN, y, helvetica, 10, muted);
+  y -= 30;
+
+  const description = `El proyecto plantea una solución de abastecimiento energético para ${input.customer.name}, fundamentada en una generación estimada de ${formatNum(input.result.monthlyGenerationBase)} kWh/mes, equivalente a ${formatNum(input.result.annualGeneration)} kWh/año, mediante un sistema solar fotovoltaico de alta eficiencia diseñado a la medida por ${input.company.name}.`;
+  const words = description.split(" ");
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (helvetica.widthOfTextAtSize(test, 11) > CONTENT_W) {
+      drawText(page2, line, MARGIN, y, helvetica, 11, ink);
+      y -= 18;
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) {
+    drawText(page2, line, MARGIN, y, helvetica, 11, ink);
+    y -= 30;
+  }
+
+  // Objetivos
+  drawText(page2, "OBJETIVOS DEL PROYECTO", MARGIN, y, helveticaBold, 13, primary);
+  y -= 24;
+  const objectives = [
+    ["Eficiencia energética", "Lograr un suministro eléctrico eficiente y sostenible para la operación del cliente."],
+    ["Sostenibilidad", "Contribuir con la preservación del medio ambiente mediante fuentes renovables."],
+    ["Ahorro fiscal", "Reducir costos energéticos mediante autogeneración y los beneficios de la Ley 57-07."],
+    ["Independencia", "Disminuir la exposición a las alzas tarifarias y a las interrupciones del servicio."],
+  ];
+  for (const [title, desc] of objectives) {
+    drawRect(page2, MARGIN, y - 34, 4, 34, secondary);
+    drawText(page2, title, MARGIN + 16, y - 12, helveticaBold, 11, ink);
+    drawText(page2, desc, MARGIN + 16, y - 26, helvetica, 9, muted);
+    y -= 48;
+  }
+
+  y -= 10;
+  drawRect(page2, MARGIN, y - 50, CONTENT_W, 50, light);
+  drawText(page2, "Importante.", MARGIN + 12, y - 16, helveticaBold, 9, primary);
+  drawText(page2, "El cálculo de generación está basado en el promedio de consumo energético reflejado en las facturas eléctricas del cliente.", MARGIN + 12, y - 30, helvetica, 9, muted);
+  y -= 70;
+
+  // Marco regulatorio
+  drawText(page2, "MARCO REGULATORIO — INYECCIÓN A LA RED", MARGIN, y, helveticaBold, 13, primary);
+  y -= 20;
+  const regulatory = `De acuerdo con la normativa vigente de la Superintendencia de Electricidad (SIE), los nuevos clientes de las categorías BTS-1 (residencial) y BTS-2 (comercial de baja demanda) están sujetos a un cargo equivalente a un porcentaje del valor de la tarifa eléctrica sobre la energía inyectada a la red, como contraprestación por el uso de la infraestructura de distribución. Este cargo aplica únicamente a la energía exportada — no a la energía autoconsumida en sitio. ${input.company.name} diseña cada sistema para maximizar el autoconsumo y minimizar el impacto de esta regulación.`;
+  const regWords = regulatory.split(" ");
+  line = "";
+  for (const word of regWords) {
+    const test = line ? `${line} ${word}` : word;
+    if (helvetica.widthOfTextAtSize(test, 9) > CONTENT_W) {
+      drawText(page2, line, MARGIN, y, helvetica, 9, ink);
+      y -= 14;
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) drawText(page2, line, MARGIN, y, helvetica, 9, ink);
+
+  drawLine(page2, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page2, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page2, "02", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 3: COTIZACIÓN ============
+  const page3 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page3, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page3, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page3, "02", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  y = PAGE_H - 100;
+  drawText(page3, "Inversión y Cotización del Sistema", MARGIN, y, helveticaBold, 18, primary);
+  y -= 24;
+  drawText(page3, `Sistema solar fotovoltaico de ${input.result.installedKwp.toFixed(2)} kWp  →  generación estimada ${formatNum(input.result.monthlyGenerationBase)} kWh/mes  |  ${formatNum(input.result.annualGeneration)} kWh/año`, MARGIN, y, helvetica, 10, ink);
+  y -= 20;
+  drawText(page3, `— ${input.result.panelCount} módulos bifaciales ${input.project.panelWatts} W  |  — Inversor ${input.project.inverter || "por seleccionar"}  |  — Monitoreo incluido`, MARGIN, y, helvetica, 10, ink);
+  y -= 40;
+
+  // Tabla de cotización
+  const col1 = MARGIN;
+  const col2 = MARGIN + 260;
+  const col3 = PAGE_W - MARGIN - 120;
+  const headerY = y;
+  drawRect(page3, MARGIN, headerY - 24, CONTENT_W, 24, primary);
+  drawText(page3, "CONCEPTO", col1 + 10, headerY - 8, helveticaBold, 10, white);
+  drawText(page3, "CAPACIDAD", col2 + 10, headerY - 8, helveticaBold, 10, white);
+  drawText(page3, "MONTO", col3 + 10, headerY - 8, helveticaBold, 10, white);
+  y -= 40;
+
+  for (const item of input.quoteItems) {
+    drawRect(page3, MARGIN, y - 24, CONTENT_W, 24, light);
+    drawText(page3, item.name, col1 + 10, y - 8, helvetica, 10, ink);
+    drawText(page3, item.description || "Incluido", col2 + 10, y - 8, helvetica, 10, muted);
+    drawText(page3, formatUsd(item.amountUsd), col3 + 10, y - 8, helveticaBold, 10, ink);
+    y -= 30;
+  }
+
+  // Totales
+  y -= 10;
+  drawRect(page3, MARGIN, y - 24, CONTENT_W, 24, light);
+  drawText(page3, "Sub-Total", col1 + 10, y - 8, helveticaBold, 11, ink);
+  drawText(page3, formatUsd(quoteSubtotal), col3 + 10, y - 8, helveticaBold, 11, ink);
+  y -= 30;
+  drawRect(page3, MARGIN, y - 24, CONTENT_W, 24, light);
+  drawText(page3, "ITBIS", col1 + 10, y - 8, helveticaBold, 11, ink);
+  const quoteTax = input.result.costUsd > 0 ? input.result.itbisUsd * (quoteSubtotal / input.result.costUsd) : 0;
+  drawText(page3, formatUsd(quoteTax), col3 + 10, y - 8, helveticaBold, 11, ink);
+  y -= 34;
+  drawRect(page3, MARGIN, y - 30, CONTENT_W, 30, primary);
+  drawText(page3, "INVERSIÓN TOTAL", col1 + 10, y - 10, helveticaBold, 13, white);
+  drawText(page3, formatUsd(quoteSubtotal + quoteTax), col3 + 10, y - 10, helveticaBold, 13, white);
+  y -= 50;
+  drawRect(page3, MARGIN, y - 24, CONTENT_W, 24, light);
+  drawText(page3, "EQUIVALENTE EN RD$", col1 + 10, y - 8, helveticaBold, 11, ink);
+  drawText(page3, `RD$ ${Math.round(quoteTotalDop).toLocaleString("es-DO")}`, col3 + 10, y - 8, helveticaBold, 11, ink);
+  y -= 30;
+  drawRect(page3, MARGIN, y - 24, CONTENT_W, 24, light);
+  drawText(page3, "PRECIO POR Wp", col1 + 10, y - 8, helveticaBold, 11, ink);
+  drawText(page3, formatUsd(quotePricePerWp), col3 + 10, y - 8, helveticaBold, 11, ink);
+  y -= 30;
+  drawText(page3, "* Precio general por kWp instalado, llave en mano — no se desglosa por componente. Equipos sujetos a disponibilidad del fabricante.", MARGIN, y, helveticaOblique, 8, muted);
+
+  drawLine(page3, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page3, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page3, "03", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 4: ANÁLISIS ============
+  const page4 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page4, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page4, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page4, "03", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  y = PAGE_H - 100;
+  drawText(page4, "Análisis de Consumo y Producción Solar", MARGIN, y, helveticaBold, 18, primary);
+  y -= 30;
+
+  // Métricas
+  const metricW = (CONTENT_W - 20) / 3;
+  drawRect(page4, MARGIN, y - 50, metricW, 50, primary);
+  drawText(page4, formatDop(input.result.annualSavingsDop), MARGIN + 10, y - 14, helveticaBold, 14, white);
+  drawText(page4, "AHORRO ANUAL ESTIMADO", MARGIN + 10, y - 30, helvetica, 8, white);
+
+  drawRect(page4, MARGIN + metricW + 10, y - 50, metricW, 50, secondary);
+  drawText(page4, `${formatNum(input.result.annualGeneration)} kWh`, MARGIN + metricW + 20, y - 14, helveticaBold, 14, white);
+  drawText(page4, "GENERACIÓN ANUAL", MARGIN + metricW + 20, y - 30, helvetica, 8, white);
+
+  drawRect(page4, MARGIN + 2 * (metricW + 10), y - 50, metricW, 50, accent);
+  drawText(page4, `~${input.result.co2AvoidedTons.toFixed(1)} Ton`, MARGIN + 2 * (metricW + 10) + 10, y - 14, helveticaBold, 14, ink);
+  drawText(page4, "CO₂ EVITADO / AÑO", MARGIN + 2 * (metricW + 10) + 10, y - 30, helvetica, 8, ink);
+
+  y -= 80;
+
+  // Tabla mensual
+  const tableW = CONTENT_W;
+  const colWidths = [tableW * 0.25, tableW * 0.25, tableW * 0.25, tableW * 0.25];
+  const rowH = 20;
+  const headerRowY = y;
+  drawRect(page4, MARGIN, headerRowY - rowH, tableW, rowH, primary);
+  const headers = ["MES", "CONSUMO kWh", "GENERACIÓN kWh", "COBERTURA"];
+  let cx = MARGIN;
+  headers.forEach((h, i) => {
+    drawText(page4, h, cx + 8, headerRowY - 14, helveticaBold, 9, white);
+    cx += colWidths[i];
+  });
+  y -= rowH + 2;
+
+  MONTHS.forEach((month, index) => {
+    const rowY = y;
+    drawRect(page4, MARGIN, rowY - rowH, tableW, rowH, index % 2 ? light : white);
+    const cells = [
+      month,
+      formatNum(input.consumption[index]),
+      formatNum(input.result.monthlyGeneration[index]),
+      `${input.result.monthlyCoverage[index].toFixed(1)}%`,
+    ];
+    cx = MARGIN;
+    cells.forEach((cell, i) => {
+      drawText(page4, cell, cx + 8, rowY - 14, i === 3 ? helveticaBold : helvetica, 9, i === 3 && input.result.monthlyCoverage[index] >= 100 ? secondary : ink);
+      cx += colWidths[i];
+    });
+    y -= rowH;
+  });
+
+  y -= 20;
+  drawText(page4, "Datos de ejemplo — el gráfico real se genera a partir del levantamiento de consumo del cliente.", MARGIN, y, helveticaOblique, 8, muted);
+  y -= 16;
+  drawText(page4, "Importante. La generación estimada dependerá de las condiciones climatológicas del sitio. El ahorro proyectado tiene un margen de +/-5%.", MARGIN, y, helveticaOblique, 8, muted);
+
+  drawLine(page4, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page4, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page4, "04", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 5: MARCO LEGAL ============
+  const page5 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page5, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page5, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page5, "04", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  y = PAGE_H - 100;
+  drawText(page5, "Marco Legal y Beneficios", MARGIN, y, helveticaBold, 18, primary);
+  y -= 20;
+  drawText(page5, "Ley 57-07", MARGIN, y, helveticaBold, 14, secondary);
+  y -= 30;
+
+  drawText(page5, "BENEFICIOS DE LA LEY 57-07", MARGIN, y, helveticaBold, 12, primary);
+  y -= 24;
+  const benefits = [
+    ["Exención de impuestos de importación", "Cap. III — Art. 9"],
+    ["Exención de impuesto sobre la renta", "Cap. III — Art. 10"],
+    ["Reducción de impuestos por financiamiento externo", "Cap. III — Art. 11"],
+    ["Crédito fiscal hasta 40% del costo de inversión", "Cap. III — Art. 12"],
+  ];
+  for (const [benefit, ref] of benefits) {
+    drawRect(page5, MARGIN, y - 24, CONTENT_W, 24, light);
+    drawText(page5, benefit, MARGIN + 10, y - 8, helvetica, 10, ink);
+    drawText(page5, ref, PAGE_W - MARGIN - 10, y - 8, helveticaBold, 10, secondary, { align: "right" });
+    y -= 30;
+  }
+
+  y -= 20;
+  drawText(page5, "NOTAS Y DATOS IMPORTANTES", MARGIN, y, helveticaBold, 12, primary);
+  y -= 24;
+  const notes = [
+    "Los pagos se realizan en USD o DOP a la tasa de venta del Banco Central del día.",
+    "Los sistemas de inyección a red dejan de producir si se interrumpe el suministro eléctrico.",
+    "El cálculo estimado se basa en el promedio de consumo anual del cliente.",
+    "Equipos sujetos a disponibilidad; pueden reemplazarse por similares o superiores.",
+  ];
+  for (const note of notes) {
+    drawText(page5, `—  ${note}`, MARGIN + 10, y, helvetica, 10, ink);
+    y -= 20;
+  }
+
+  y -= 20;
+  drawRect(page5, MARGIN, y - 50, CONTENT_W, 50, light);
+  drawText(page5, "Importante.", MARGIN + 12, y - 16, helveticaBold, 9, primary);
+  drawText(page5, "El cliente deberá cubrir entre RD$7,800 – RD$12,000 anuales durante 3 años por gastos de exoneración de impuestos (Ley 57-07).", MARGIN + 12, y - 30, helvetica, 9, muted);
+
+  drawLine(page5, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page5, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page5, "05", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 6: GARANTÍAS ============
+  const page6 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page6, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page6, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page6, "05", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  y = PAGE_H - 100;
+  drawText(page6, "Garantías del Sistema", MARGIN, y, helveticaBold, 18, primary);
+  y -= 20;
+  drawText(page6, "Respaldo total en equipos y servicio", MARGIN, y, helvetica, 12, muted);
+  y -= 40;
+
+  const warranties = [
+    ["Panel Solar Fotovoltaico", "GARANTÍA DEL PRODUCTO", "10 años", "GARANTÍA DE RENDIMIENTO", "30 años", primary],
+    ["Inversor de Red", "GARANTÍA DEL PRODUCTO", "5 años", "GARANTÍA DE RENDIMIENTO", "10 años", secondary],
+    ["Soporte Técnico", "SOPORTE INCLUIDO", "2 años", "ASISTENCIA", "24/7", accent],
+  ] as const;
+
+  for (const [title, label1, value1, label2, value2, color] of warranties) {
+    drawRect(page6, MARGIN, y - 80, CONTENT_W, 80, light);
+    drawRect(page6, MARGIN, y - 80, 6, 80, color);
+    drawText(page6, title, MARGIN + 20, y - 20, helveticaBold, 14, ink);
+    drawText(page6, label1, MARGIN + 20, y - 40, helvetica, 9, muted);
+    drawText(page6, value1, MARGIN + 20, y - 56, helveticaBold, 12, color);
+    drawText(page6, label2, MARGIN + 200, y - 40, helvetica, 9, muted);
+    drawText(page6, value2, MARGIN + 200, y - 56, helveticaBold, 12, color);
+    y -= 100;
+  }
+
+  y -= 20;
+  drawRect(page6, MARGIN, y - 40, CONTENT_W, 40, primary);
+  drawText(page6, `${input.company.name.toUpperCase()}  ·  25+ AÑOS DE VIDA ÚTIL  ·  0 EMISIÓN DE CO₂  ·  SOPORTE TÉCNICO 24/7`, PAGE_W / 2, y - 14, helveticaBold, 9, white, { align: "center" });
+
+  drawLine(page6, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page6, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page6, "06", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 7: FASES ============
+  const page7 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page7, 0, PAGE_H - 60, PAGE_W, 60, primary);
+  drawText(page7, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
+  drawText(page7, "06", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+
+  y = PAGE_H - 100;
+  drawText(page7, "Fases del Proyecto", MARGIN, y, helveticaBold, 18, primary);
+  y -= 20;
+  drawText(page7, "Proceso de implementación paso a paso", MARGIN, y, helvetica, 12, muted);
+  y -= 40;
+
+  const phases = [
+    ["Aprobación Distribuidora", "Evaluación y aprobación por parte de la distribuidora eléctrica."],
+    ["Instalación de Equipos", "Montaje de paneles, inversor, estructura y cableado en sitio."],
+    ["Visita de Supervisión", "Inspección técnica oficial de la instalación."],
+    ["Acuerdos de Interconexión", "Firma de documentos de conexión a la red eléctrica."],
+    ["Carta Medidor Bidireccional", "Emisión de carta oficial para instalación del medidor."],
+    ["Instalación del Medidor", "Instalación del contador bidireccional por la distribuidora."],
+    ["Arranque del Sistema", "Puesta en marcha y verificación del sistema fotovoltaico."],
+  ];
+
+  phases.forEach(([title, desc], index) => {
+    const isLast = index === phases.length - 1;
+    drawRect(page7, MARGIN, y - 40, 40, 40, isLast ? accent : primary);
+    drawText(page7, String(index + 1), MARGIN + 20, y - 14, helveticaBold, 16, isLast ? ink : white, { align: "center" });
+    drawText(page7, title, MARGIN + 60, y - 14, helveticaBold, 12, ink);
+    drawText(page7, desc, MARGIN + 60, y - 28, helvetica, 9, muted);
+    y -= 52;
+  });
+
+  y -= 20;
+  drawRect(page7, MARGIN, y - 50, CONTENT_W, 50, light);
+  drawText(page7, "Importante.", MARGIN + 12, y - 16, helveticaBold, 9, primary);
+  drawText(page7, "Cada proceso está sujeto a las reglas de la distribuidora eléctrica. La empresa no es responsable de atrasos causados por dicha institución, y gestiona todos los trámites ante CNE, distribuidoras y DGII.", MARGIN + 12, y - 30, helvetica, 9, muted);
+
+  drawLine(page7, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
+  drawText(page7, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
+  drawText(page7, "07", PAGE_W - MARGIN, 16, helvetica, 8, muted, { align: "right" });
+
+  // ============ PÁGINA 8: CONTRAportada ============
+  const page8 = pdf.addPage([PAGE_W, PAGE_H]);
+  drawRect(page8, 0, 0, PAGE_W, PAGE_H, primary);
+
+  if (cover) {
+    const coverW = PAGE_W;
+    const coverH = 300;
+    page8.drawImage(cover, { x: 0, y: PAGE_H - coverH, width: coverW, height: coverH });
+  }
+
+  drawText(page8, "Transformemos su energía", PAGE_W / 2, PAGE_H - 380, helveticaBold, 28, white, { align: "center" });
+  drawText(page8, "Solicite su cotización sin compromiso — sin costo ni obligación.", PAGE_W / 2, PAGE_H - 410, helvetica, 12, white, { align: "center" });
+
+  const contactY = PAGE_H - 480;
+  drawText(page8, "TELÉFONO", PAGE_W / 2, contactY, helveticaBold, 10, accent, { align: "center" });
+  drawText(page8, input.company.phone || "N/D", PAGE_W / 2, contactY - 18, helvetica, 12, white, { align: "center" });
+  drawText(page8, "EMAIL", PAGE_W / 2, contactY - 50, helveticaBold, 10, accent, { align: "center" });
+  drawText(page8, input.company.email || "N/D", PAGE_W / 2, contactY - 68, helvetica, 12, white, { align: "center" });
+  drawText(page8, "UBICACIÓN", PAGE_W / 2, contactY - 100, helveticaBold, 10, accent, { align: "center" });
+  drawText(page8, input.company.address || "República Dominicana", PAGE_W / 2, contactY - 118, helvetica, 12, white, { align: "center" });
+
+  const badgeY = 120;
+  const badgeW = (PAGE_W - 2 * MARGIN - 20) / 3;
+  drawRect(page8, MARGIN, badgeY, badgeW, 50, white);
+  drawText(page8, "25+", MARGIN + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
+  drawText(page8, "AÑOS VIDA ÚTIL", MARGIN + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
+
+  drawRect(page8, MARGIN + badgeW + 10, badgeY, badgeW, 50, white);
+  drawText(page8, "0", MARGIN + badgeW + 10 + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
+  drawText(page8, "EMISIÓN CO₂", MARGIN + badgeW + 10 + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
+
+  drawRect(page8, MARGIN + 2 * (badgeW + 10), badgeY, badgeW, 50, white);
+  drawText(page8, "24/7", MARGIN + 2 * (badgeW + 10) + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
+  drawText(page8, "SOPORTE TÉCNICO", MARGIN + 2 * (badgeW + 10) + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
+
+  drawText(page8, `${input.company.name.toUpperCase()}  ·  RD`, PAGE_W / 2, 40, helveticaBold, 12, white, { align: "center" });
+  drawText(page8, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 16, helveticaBold, 8, white, { align: "right" });
+  drawText(page8, "08", PAGE_W - MARGIN, 16, helvetica, 8, white, { align: "right" });
+
   return pdf.save();
 }
