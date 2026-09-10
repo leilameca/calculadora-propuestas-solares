@@ -1,16 +1,27 @@
 "use client";
 
-import { ArrowUpRight, CircleDollarSign, FileCheck2, Loader2, PanelsTopLeft, Plus } from "lucide-react";
+import { AlertCircle, ArrowUpRight, CircleDollarSign, FileCheck2, Loader2, PanelsTopLeft, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function DashboardPage() {
   const [data,setData]=useState<{metrics:{proposalsThisMonth:number;capacityKwp:number;pipelineUsd:number;approvalRate:number;approvedCount:number;totalProposals:number};recent:Array<{id:string;number:string;customer:string;projectName:string;status:string;totalUsd:number;installedKwp:number}>}|null>(null);
-  useEffect(()=>{fetch("/api/dashboard").then(response=>response.ok?response.json():null).then(setData).catch(()=>setData(null))},[]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [attempt,setAttempt]=useState(0);
+  useEffect(()=>{
+    setLoading(true);setError("");
+    fetch("/api/dashboard",{signal:AbortSignal.timeout(15_000)}).then(async response=>{
+      if(response.status===401){location.replace("/login?reason=session-expired");return null;}
+      if(!response.ok)throw new Error("No se pudo cargar el resumen comercial.");
+      return response.json();
+    }).then(value=>{if(value)setData(value);}).catch(cause=>setError(cause instanceof DOMException&&cause.name==="TimeoutError"?"La conexi\u00f3n tard\u00f3 demasiado. Revisa tu internet e intenta de nuevo.":"No pudimos cargar el resumen en este momento.")).finally(()=>setLoading(false));
+  },[attempt]);
   const money=new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
   const metrics=data?[["Propuestas este mes",String(data.metrics.proposalsThisMonth),FileCheck2],["Capacidad cotizada",`${data.metrics.capacityKwp.toFixed(1)} kWp`,PanelsTopLeft],["Valor en pipeline",`US$ ${money.format(data.metrics.pipelineUsd)}`,CircleDollarSign]] as const:[];
-  if(!data)return <div className="grid min-h-96 place-items-center"><Loader2 className="animate-spin text-primary"/></div>;
+  if(loading)return <div className="grid min-h-96 place-items-center"><div className="text-center"><Loader2 className="mx-auto animate-spin text-primary"/><p className="mt-3 text-sm text-slate-500">Cargando tu empresa...</p></div></div>;
+  if(error||!data)return <div className="grid min-h-96 place-items-center"><div className="max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm"><AlertCircle className="mx-auto text-amber-500"/><h1 className="mt-3 text-lg font-bold">No fue posible cargar el panel</h1><p className="mt-2 text-sm leading-6 text-slate-500">{error||"La respuesta del servidor no conten\u00eda datos."}</p><button type="button" onClick={()=>setAttempt(value=>value+1)} className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white"><RefreshCw size={16}/>Intentar de nuevo</button></div></div>;
   return <div className="mx-auto max-w-7xl space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-primary">Panel comercial</p><h1 className="text-3xl font-black tracking-tight">Resumen</h1><p className="mt-1 text-sm text-slate-500">Actividad de propuestas y rendimiento del portafolio.</p></div><Link href="/dashboard/calculator" className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white"><Plus size={17}/>Nueva propuesta</Link></div>
     <div className="grid gap-4 md:grid-cols-3">{metrics.map(([label,value,Icon]) => <Card key={label}><CardContent className="flex items-center justify-between"><div><p className="metric-value">{value}</p><p className="metric-label">{label}</p></div><div className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary"><Icon size={22}/></div></CardContent></Card>)}</div>

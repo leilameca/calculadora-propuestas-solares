@@ -3,8 +3,15 @@ import { prisma } from "./prisma";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 export type SessionPayload={userId:string;companyId?:string;role:string;email:string};
+const DEFAULT_SESSION_DAYS=30;
+const MAX_SESSION_DAYS=90;
 const secret=()=>{const value=process.env.AUTH_SECRET;if(!value&&process.env.NODE_ENV==="production")throw new Error("AUTH_SECRET es obligatorio en producción.");return new TextEncoder().encode(value||"development-only-secret-change-me");};
-export async function createSessionToken(payload:SessionPayload){ return new SignJWT(payload).setProtectedHeader({alg:"HS256"}).setIssuedAt().setExpirationTime("8h").sign(secret()); }
+export function sessionMaxAgeSeconds(){
+  const configuredDays=Number(process.env.SESSION_MAX_AGE_DAYS||DEFAULT_SESSION_DAYS);
+  const days=Number.isFinite(configuredDays)?Math.min(MAX_SESSION_DAYS,Math.max(1,Math.floor(configuredDays))):DEFAULT_SESSION_DAYS;
+  return days*24*60*60;
+}
+export async function createSessionToken(payload:SessionPayload){ return new SignJWT(payload).setProtectedHeader({alg:"HS256"}).setIssuedAt().setExpirationTime(`${sessionMaxAgeSeconds()}s`).sign(secret()); }
 export async function verifySessionToken(token:string){ return z.object({userId:z.string().min(1),companyId:z.string().optional(),role:z.enum(["SUPERADMIN","COMPANY_ADMIN","SALES","ENGINEER","VIEWER"]),email:z.string()}).parse((await jwtVerify(token,secret(),{algorithms:["HS256"],requiredClaims:["exp","iat"]})).payload); }
 export async function sessionFromRequest(request:NextRequest): Promise<SessionPayload | null> {
   const token=request.cookies.get("solar_session")?.value;

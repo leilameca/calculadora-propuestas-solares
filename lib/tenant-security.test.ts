@@ -34,6 +34,7 @@ describe("tenant authorization", () => {
     expect(response.status).toBe(200);
     const cookie = response.headers.get("set-cookie")!;
     expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Max-Age=2592000");
     expect(await verifySessionToken(cookie.split(";")[0].split("=")[1])).toMatchObject({ userId: user.id, companyId: "tenant-a" });
   });
   it("denies unauthenticated APIs", async () => {

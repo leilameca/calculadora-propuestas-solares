@@ -19,11 +19,11 @@ export default function LoginPage(){
     setError("");
     try{
       const data=new FormData(event.currentTarget);
-      const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",body:JSON.stringify({email:data.get("email"),password:data.get("password")})});
+      const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",signal:AbortSignal.timeout(15_000),body:JSON.stringify({email:data.get("email"),password:data.get("password")})});
       if(!response.ok){setError("Correo o contraseña incorrectos.");setBusy(false);return;}
       router.replace("/dashboard");
-    }catch{
-      setError("No fue posible conectar con el servidor.");
+    }catch(error){
+      setError(error instanceof DOMException&&error.name==="TimeoutError"?"El servidor tard\u00f3 demasiado en responder. Intenta nuevamente.":"No fue posible conectar con el servidor.");
       setBusy(false);
     }
   }
