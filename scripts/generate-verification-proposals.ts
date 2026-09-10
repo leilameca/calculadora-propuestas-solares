@@ -35,9 +35,9 @@ const payload: ProposalDocumentInput = {
     itbisRate: 0.18,
   },
   customer: {
-    name: "CCA CIBAO CENTRAL DE ALMACENAMIENTO SRL",
-    nic: "7471365",
-    address: "Av. Padre Las Casas 1, Urb. El Molino",
+    name: "CLIENTE FICTICIO NORTE SRL",
+    nic: "9000001",
+    address: "Av. Ejemplo 1, Sector Ficticio",
   },
   project: {
     name: "Sistema Solar Fotovoltaico",
@@ -46,6 +46,7 @@ const payload: ProposalDocumentInput = {
     tariff: "MTD-1",
     systemType: "On-Grid",
     panelWatts: 590,
+    exchangeRate: 60,
     inverter: "Por seleccionar desde inventario",
   },
   consumption,

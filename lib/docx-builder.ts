@@ -3,7 +3,7 @@ import {
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, VerticalAlign, WidthType,
 } from "docx";
 import sharp from "sharp";
-import { MONTHS, type SolarCalculationResult } from "./solar-calculator";
+import { MONTHS } from "./solar-calculator";
 import { renderPdfPages } from "./pdf-images";
 
 const PAGE_WIDTH = 12240;
@@ -13,21 +13,10 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const CELL_MARGINS = { top: 160, bottom: 160, left: 200, right: 200 };
 const white = "FFFFFF", ink = "172033", gray = "F3F4F6", muted = "64748B";
 
-export interface ProposalDocumentInput {
-  company: { name:string; rnc?:string; address?:string; phone?:string; email?:string; website?:string; slogan?:string; logoBase64?:string; coverImageBase64?:string; backCoverImageBase64?:string; primaryColor:string; secondaryColor:string; accentColor:string; proposalValidityDays?:number; itbisEnabled?:boolean; itbisRate?:number };
-  customer: { name:string; nic?:string; address?:string; logoBase64?:string };
-  project: { name:string; city:string; utility:string; tariff:string; systemType:string; panelWatts:number; inverter?:string; exchangeRate?:number };
-  consumption: number[];
-  result: SolarCalculationResult;
-  quoteItems: Array<{ name:string; description?:string; quantity?:number; amountUsd:number }>;
-  proposalNumber?: string;
-  date?: string;
-  selectedEquipmentIds?: string[];
-  attachments?: Array<{ equipmentName:string; kind:"DATASHEET"|"CERTIFICATE"; fileName:string; mimeType:string; dataUrl:string }>;
-  selectedEquipment?: Array<{name:string;type:string;warrantyYears?:number|null;logoUrl?:string|null}>;
-  invoice?: {name:string;mimeType:string;dataUrl:string};
-  proposalText?:string;
-}
+import type { ProposalDocumentInput } from "./proposal-types";
+export type { ProposalDocumentInput } from "./proposal-types";
+import { prepareProposalAssets } from "./proposal-assets";
+import { normalizeProposal } from "./proposal-validation";
 
 const cleanHex = (value:string|undefined,fallback:string) => (value||"").replace("#","").match(/^[0-9A-Fa-f]{6}$/)?.[0].toUpperCase() || fallback;
 const usd = (v:number)=>`US$ ${v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -39,8 +28,8 @@ const p = (text:string, options:{bold?:boolean;color?:string;size?:number;align?
 const empty = (after=80)=>new Paragraph({spacing:{after},children:[]});
 const borders = (color="D9DEE7",size=4)=>({top:{style:BorderStyle.SINGLE,color,size},bottom:{style:BorderStyle.SINGLE,color,size},left:{style:BorderStyle.SINGLE,color,size},right:{style:BorderStyle.SINGLE,color,size}});
 
-function cell(children:(Paragraph|Table)[], width:number, opts:{fill?:string;align?:typeof AlignmentType[keyof typeof AlignmentType];borderColor?:string;colSpan?:number}={}) {
-  return new TableCell({ children, width:{size:width,type:WidthType.DXA}, columnSpan:opts.colSpan, verticalAlign:VerticalAlign.CENTER, margins:CELL_MARGINS, shading:opts.fill?{type:ShadingType.CLEAR,fill:opts.fill}:undefined, borders:borders(opts.borderColor) });
+function cell(children:(Paragraph|Table)[], width:number, opts:{compact?:boolean;fill?:string;align?:typeof AlignmentType[keyof typeof AlignmentType];borderColor?:string;colSpan?:number}={}) {
+  return new TableCell({ children, width:{size:width,type:WidthType.DXA}, columnSpan:opts.colSpan, verticalAlign:VerticalAlign.CENTER, margins:opts.compact?{top:70,bottom:70,left:200,right:200}:CELL_MARGINS, shading:opts.fill?{type:ShadingType.CLEAR,fill:opts.fill}:undefined, borders:borders(opts.borderColor) });
 }
 function table(rows:TableRow[], widths:number[], opts:{borderColor?:string}={}) {
   return new Table({ rows, width:{size:CONTENT_WIDTH,type:WidthType.DXA}, columnWidths:widths, layout:"fixed" as never, borders:borders(opts.borderColor) });
@@ -58,7 +47,7 @@ function imageData(base64:string){
   return {data:Buffer.from(match[2],"base64"),type:(match[1].toLowerCase()==="png"?"png":"jpg") as "png"|"jpg"};
 }
 function dataUrlBytes(dataUrl:string){const encoded=dataUrl.split(",",2)[1];if(!encoded)throw new Error("Adjunto inválido.");return Buffer.from(encoded,"base64");}
-async function mediaPages(media:{name:string;mimeType:string;dataUrl:string},heading:string,primary:string){
+async function unsafeMediaPages(media:{name:string;mimeType:string;dataUrl:string},heading:string,primary:string){
   const source=dataUrlBytes(media.dataUrl);
   const pages=media.mimeType==="application/pdf"?await renderPdfPages(new Uint8Array(source),20,1.6):[source];
   const blocks:(Paragraph|Table)[]=[];
@@ -68,6 +57,10 @@ async function mediaPages(media:{name:string;mimeType:string;dataUrl:string},hea
     blocks.push(pageBreak(),p(`${heading}${pages.length>1?` · PÁGINA ${index+1}`:""}`,{bold:true,color:primary,size:22,after:150}),new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({data:png,type:"png",transformation:{width:Math.round((meta.width||590)*ratio),height:Math.round((meta.height||650)*ratio)}})]}));
   }
   return blocks;
+}
+async function mediaPages(media:{name:string;mimeType:string;dataUrl:string},heading:string,primary:string) {
+  try { return await unsafeMediaPages(media,heading,primary); }
+  catch { console.warn("docx.attachment_unavailable",{mimeType:media.mimeType});return [pageBreak(),p(heading,{bold:true,color:primary}),p(`Adjunto no disponible: ${media.name}. Solicite una copia v?lida.`)]; }
 }
 function photoBlock(base64:string|undefined,label:string,primary:string,heightLabel="FOTOGRAFÍA AÉREA / PROYECTO") {
   if(base64){
@@ -98,11 +91,12 @@ async function chartImage(input:ProposalDocumentInput,primary:string,accent:stri
 }
 
 export async function buildProposalDocument(input:ProposalDocumentInput): Promise<Document> {
+  input=await prepareProposalAssets(normalizeProposal(input));
   if(input.consumption.length!==12) throw new Error("La propuesta requiere 12 consumos mensuales.");
   const primary=cleanHex(input.company.primaryColor,"0F4C5C"), secondary=cleanHex(input.company.secondaryColor,"2F7D32"), accent=cleanHex(input.company.accentColor,"F2A900");
   const date=input.date||new Intl.DateTimeFormat("es-DO",{dateStyle:"long"}).format(new Date());
   const quoteSubtotal=input.quoteItems.reduce((sum,item)=>sum+item.amountUsd,0);
-  const quoteTax=input.company.itbisEnabled===false?0:(input.company.itbisRate||0.18)*quoteSubtotal;
+  const quoteTax=input.company.itbisEnabled===false?0:(input.company.itbisRate??0.18)*quoteSubtotal;
   const quoteTotal=quoteSubtotal+quoteTax;
   const quoteTotalDop=quoteTotal*(input.project.exchangeRate||0);
   const quotePricePerWp=input.result.installedKwp>0?quoteTotal/(input.result.installedKwp*1000):0;
@@ -124,14 +118,14 @@ export async function buildProposalDocument(input:ProposalDocumentInput): Promis
   input.quoteItems.forEach((item,index)=>quoteRows.push(new TableRow({children:[cell([p(item.name,{bold:true,size:17})],quoteWidths[0],{fill:index%2?gray:white}),cell([p(item.description||"Incluido",{size:17})],quoteWidths[1],{fill:index%2?gray:white}),cell([p(item.amountUsd===0?"INCLUIDO":usd(item.amountUsd),{bold:true,size:17,align:AlignmentType.RIGHT,color:item.amountUsd===0?secondary:ink})],quoteWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
   quoteRows.push(new TableRow({children:[cell([p("SUB-TOTAL",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(usd(quoteSubtotal),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}));
   if(quoteTax>0)quoteRows.push(new TableRow({children:[cell([p(`ITBIS ${input.company.itbisRate?`(${(input.company.itbisRate*100).toFixed(2)}%)`:""}`.trim(),{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quoteTax),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
-  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("EQUIVALENTE EN RD$",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(`RD$ ${Math.round(quoteTotalDop).toLocaleString("es-DO")}`,{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}),new TableRow({children:[cell([p("PRECIO POR kWp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quotePricePerKwp),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
+  quoteRows.push(new TableRow({children:[cell([p("INVERSIÓN TOTAL",{bold:true,color:white,size:22})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:primary,borderColor:primary}),cell([p(usd(quoteTotal),{bold:true,color:white,size:22,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:primary,align:AlignmentType.RIGHT,borderColor:primary})]}),new TableRow({children:[cell([p("EQUIVALENTE EN RD$",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2,fill:gray}),cell([p(`RD$ ${Math.round(quoteTotalDop).toLocaleString("es-DO")}`,{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{fill:gray,align:AlignmentType.RIGHT})]}),new TableRow({children:[cell([p("PRECIO POR Wp",{bold:true,size:18})],quoteWidths[0]+quoteWidths[1],{colSpan:2}),cell([p(usd(quotePricePerWp),{bold:true,size:18,align:AlignmentType.RIGHT})],quoteWidths[2],{align:AlignmentType.RIGHT})]}));
   children.push(table(quoteRows,quoteWidths,{borderColor:primary}));
 
   // 4. Análisis.
   children.push(pageBreak(),sectionHeading(3,"Análisis de consumo y producción",primary,secondary),table([new TableRow({children:[metricCard("Ahorro anual",dop(input.result.annualSavingsDop),Math.floor(CONTENT_WIDTH/3),primary,white),metricCard("Generación anual",`${num(input.result.annualGeneration)} kWh`,Math.floor(CONTENT_WIDTH/3),secondary,white),metricCard("CO2 evitado",`${input.result.co2AvoidedTons.toFixed(2)} t`,CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3),accent,ink)]})],[Math.floor(CONTENT_WIDTH/3),Math.floor(CONTENT_WIDTH/3),CONTENT_WIDTH-2*Math.floor(CONTENT_WIDTH/3)]),empty(20),await chartImage(input,primary,accent));
   const analysisWidths=[Math.round(CONTENT_WIDTH*.22),Math.round(CONTENT_WIDTH*.29),Math.round(CONTENT_WIDTH*.29),Math.round(CONTENT_WIDTH*.2)];
-  const analysisRows=[new TableRow({tableHeader:true,children:["MES","CONSUMO KWh","GENERACIÓN KWh","COBERTURA"].map((label,i)=>cell([p(label,{bold:true,color:white,size:16,align:i?AlignmentType.RIGHT:AlignmentType.LEFT})],analysisWidths[i],{fill:primary,align:i?AlignmentType.RIGHT:AlignmentType.LEFT,borderColor:primary}))})];
-  MONTHS.forEach((month,index)=>analysisRows.push(new TableRow({children:[cell([p(month,{size:16})],analysisWidths[0],{fill:index%2?gray:white}),cell([p(num(input.consumption[index]),{size:16,align:AlignmentType.RIGHT})],analysisWidths[1],{fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(num(input.result.monthlyGeneration[index]),{size:16,align:AlignmentType.RIGHT})],analysisWidths[2],{fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(`${input.result.monthlyCoverage[index].toFixed(1)}%`,{bold:true,size:16,align:AlignmentType.RIGHT,color:input.result.monthlyCoverage[index]>=100?secondary:ink})],analysisWidths[3],{fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
+  const analysisRows=[new TableRow({cantSplit:true,tableHeader:true,children:["MES","CONSUMO KWh","GENERACIÓN KWh","COBERTURA"].map((label,i)=>cell([p(label,{bold:true,color:white,size:16,after:0,align:i?AlignmentType.RIGHT:AlignmentType.LEFT})],analysisWidths[i],{compact:true,fill:primary,align:i?AlignmentType.RIGHT:AlignmentType.LEFT,borderColor:primary}))})];
+  MONTHS.forEach((month,index)=>analysisRows.push(new TableRow({cantSplit:true,children:[cell([p(month,{size:16,after:0})],analysisWidths[0],{compact:true,fill:index%2?gray:white}),cell([p(num(input.consumption[index]),{size:16,after:0,align:AlignmentType.RIGHT})],analysisWidths[1],{compact:true,fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(num(input.result.monthlyGeneration[index]),{size:16,after:0,align:AlignmentType.RIGHT})],analysisWidths[2],{compact:true,fill:index%2?gray:white,align:AlignmentType.RIGHT}),cell([p(`${input.result.monthlyCoverage[index].toFixed(1)}%`,{bold:true,size:16,after:0,align:AlignmentType.RIGHT,color:input.result.monthlyCoverage[index]>=100?secondary:ink})],analysisWidths[3],{compact:true,fill:index%2?gray:white,align:AlignmentType.RIGHT})]})));
   children.push(table(analysisRows,analysisWidths,{borderColor:primary}));
 
   // 5. Condiciones.
