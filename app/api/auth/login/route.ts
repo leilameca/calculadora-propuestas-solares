@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { readJson } from "@/lib/api-validation";
 import { apiHandler } from "@/lib/api-handler";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -6,7 +8,7 @@ import { createSessionToken } from "@/lib/auth";
 
 async function handlePOST(request:NextRequest){
   const startedAt=performance.now();
-  const {email,password}=await request.json();
+  const {email,password}=z.object({email:z.string().max(320),password:z.string().max(1024)}).parse(await readJson(request));
   const normalizedEmail=String(email||"").trim().toLowerCase();
   if(!normalizedEmail||!password)return NextResponse.json({error:"Credenciales inválidas"},{status:401});
   const databaseStartedAt=performance.now();

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { readJson } from "@/lib/api-validation";
 import { apiHandler } from "@/lib/api-handler";
 import { NextRequest,NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -5,13 +7,13 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sessionFromRequest } from "@/lib/auth";
 async function handleGET(request:NextRequest){const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});return NextResponse.json(await prisma.company.findMany({select:{id:true,name:true,slug:true,rnc:true,email:true,active:true,createdAt:true,_count:{select:{users:true,customers:true,proposals:true}}},orderBy:{createdAt:"desc"}}));}
-async function handlePOST(request:NextRequest){try{const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});const body=await request.json();if(!body.name||!body.slug||!body.adminName||!body.adminEmail||String(body.adminPassword||"").length<8)return NextResponse.json({error:"Completa los datos y usa una contraseña temporal de al menos 8 caracteres."},{status:400});const passwordHash=await bcrypt.hash(body.adminPassword,12);const company=await prisma.$transaction(async (tx:Prisma.TransactionClient)=>{const tenant=await tx.company.create({data:{name:String(body.name).trim(),slug:String(body.slug).toLowerCase().trim().replace(/[^a-z0-9-]/g,"-"),rnc:body.rnc||null,email:body.email||null,phone:body.phone||null}});await tx.user.create({data:{companyId:tenant.id,name:String(body.adminName).trim(),email:String(body.adminEmail).toLowerCase().trim(),passwordHash,role:"COMPANY_ADMIN"}});return tenant;});return NextResponse.json(company,{status:201});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:"No se pudo crear la empresa"},{status:409});}}
+async function handlePOST(request:NextRequest){try{const session=await sessionFromRequest(request);if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});const body=z.object({name:z.string().min(1).max(300),slug:z.string().min(1).max(100),adminName:z.string().min(1).max(300),adminEmail:z.string().email().max(320),adminPassword:z.string().min(8).max(1024),rnc:z.string().max(100).nullish(),email:z.string().max(320).nullish(),phone:z.string().max(100).nullish()}).parse(await readJson(request));if(!body.name||!body.slug||!body.adminName||!body.adminEmail||String(body.adminPassword||"").length<8)return NextResponse.json({error:"Completa los datos y usa una contraseña temporal de al menos 8 caracteres."},{status:400});const passwordHash=await bcrypt.hash(body.adminPassword,12);const company=await prisma.$transaction(async (tx:Prisma.TransactionClient)=>{const tenant=await tx.company.create({data:{name:String(body.name).trim(),slug:String(body.slug).toLowerCase().trim().replace(/[^a-z0-9-]/g,"-"),rnc:body.rnc||null,email:body.email||null,phone:body.phone||null}});await tx.user.create({data:{companyId:tenant.id,name:String(body.adminName).trim(),email:String(body.adminEmail).toLowerCase().trim(),passwordHash,role:"COMPANY_ADMIN"}});return tenant;});return NextResponse.json(company,{status:201});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:"No se pudo crear la empresa"},{status:409});}}
 
 async function handlePATCH(request:NextRequest){
   try {
     const session=await sessionFromRequest(request);
     if(session?.role!=="SUPERADMIN")return NextResponse.json({error:"Acceso exclusivo de SuperAdmin"},{status:403});
-    const body=await request.json();
+    const body=z.object({id:z.string().min(1).max(100),active:z.boolean()}).parse(await readJson(request));
     if(!body.id||typeof body.active!=="boolean")return NextResponse.json({error:"Empresa y estado son obligatorios."},{status:400});
     const company=await prisma.company.update({where:{id:String(body.id)},data:{active:body.active},select:{id:true,name:true,active:true}});
     return NextResponse.json(company);

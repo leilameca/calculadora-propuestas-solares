@@ -15,6 +15,9 @@ import { GET as customers } from "../app/api/customers/route";
 import { GET as equipment } from "../app/api/equipment/route";
 import { GET as proposals } from "../app/api/proposals/route";
 import { GET as download } from "../app/api/files/[id]/route";
+import { POST as login } from "../app/api/auth/login/route";
+import bcrypt from "bcryptjs";
+import { verifySessionToken } from "./auth";
 
 const user = { id: "user-a", companyId: "tenant-a", email: "test@example.invalid", role: "SALES", active: true, company: { active: true } };
 async function request(path: string, method = "GET", role = "SALES") {
@@ -23,6 +26,16 @@ async function request(path: string, method = "GET", role = "SALES") {
 }
 beforeEach(() => { vi.clearAllMocks(); db.user.findUnique.mockResolvedValue(user); db.storedFile.findFirst.mockResolvedValue(null); db.customer.findMany.mockResolvedValue([]); db.equipmentInventory.findMany.mockResolvedValue([]); db.proposal.findMany.mockResolvedValue([]); db.proposal.findFirst.mockResolvedValue(null); });
 describe("tenant authorization", () => {
+  it("authenticates with bcrypt and issues a valid HttpOnly tenant session", async () => {
+    db.user.findUnique.mockResolvedValue({ ...user, passwordHash: await bcrypt.hash("Synthetic-password-2026", 4) });
+    const attempt = (password: string) => login(new NextRequest("http://localhost/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: user.email, password }) }), undefined);
+    expect((await attempt("wrong-password")).status).toBe(401);
+    const response = await attempt("Synthetic-password-2026");
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get("set-cookie")!;
+    expect(cookie).toContain("HttpOnly");
+    expect(await verifySessionToken(cookie.split(";")[0].split("=")[1])).toMatchObject({ userId: user.id, companyId: "tenant-a" });
+  });
   it("denies unauthenticated APIs", async () => {
     const response = await download(new NextRequest("http://localhost/api/files/foreign"), { params: Promise.resolve({ id: "foreign" }) });
     expect(response.status).toBe(401); expect(db.storedFile.findFirst).not.toHaveBeenCalled();
