@@ -58,7 +58,8 @@ export function SolarCalculatorApp() {
     fetch(`/api/proposals?id=${encodeURIComponent(proposalId)}`).then(async response=>{
       const data=await response.json();
       if(!response.ok) throw new Error(data.error||"No se pudo abrir la propuesta.");
-      const savedInput=(data.calculationInput&&typeof data.calculationInput==="object"?data.calculationInput:{}) as Partial<Inputs>&{billedRecords?:BilledConsumption[];averageCount?:number;useAverage?:boolean;lastBilledMonth?:number;lastBilledYear?:number};
+      const savedInput=(data.calculationInput&&typeof data.calculationInput==="object"?data.calculationInput:{}) as Partial<Inputs>&{billedRecords?:BilledConsumption[];averageCount?:number;useAverage?:boolean;lastBilledMonth?:number;lastBilledYear?:number;utilityBill?:ParsedUtilityBill};
+      setConfirmedBill(savedInput.utilityBill??null);
       setEditingId(data.id);setEditingNumber(data.number);
       setProjectImage(data.projectImageUrl||data.customer?.projectImageUrl||"");setCustomerLogo(data.customer?.logoUrl||"");setProposalText(data.notes||"");
       if(data.invoiceData)setInvoice({name:data.invoiceName||"factura.pdf",mimeType:data.invoiceMimeType||"application/pdf",dataUrl:data.invoiceData});
@@ -112,6 +113,7 @@ export function SolarCalculatorApp() {
   async function scan(file?: File) {
     if (!file) return;
     if(file.size>3*1024*1024){setOcrMessage("La factura debe pesar 3 MB o menos para guardarla e incluirla en la propuesta.");return;}
+    setPendingBill(null);
     setOcrBusy(true);
     setOcrMessage("");
     try {
@@ -129,7 +131,7 @@ export function SolarCalculatorApp() {
   function confirmInvoice(bill:ParsedUtilityBill) {
     if(!pendingBill)return;
     setInvoice(pendingBill.file);setConfirmedBill(bill);
-    setInputs(old=>({...old,client:bill.customerName||old.client,nic:bill.nic||old.nic,address:bill.address||old.address,tariff:bill.tariff&&bill.tariff in ELECTRICITY_RATES?bill.tariff as Tariff:old.tariff,utility:bill.utility!=="UNKNOWN"?bill.utility:old.utility}));
+    setInputs(old=>({...old,client:bill.customerName??old.client,nic:bill.nic??"",address:bill.address??"",tariff:bill.tariff&&bill.tariff in ELECTRICITY_RATES?bill.tariff as Tariff:old.tariff,utility:bill.utility!=="UNKNOWN"?bill.utility:old.utility}));
     const records=bill.consumptionHistory;
     if(records.length){const latest=records.at(-1)!;setBilledRecords(records);setLastBilledMonth(latest.month);setLastBilledYear(latest.year);setConsumption(MONTHS.map((_,i)=>records.findLast(row=>row.month===i+1)?.kwh??0));}
     setPendingBill(null);setOcrMessage(`Datos confirmados: ${records.length} meses. Complete los meses faltantes antes de calcular.`);

@@ -9,8 +9,13 @@ export const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).
 
 export async function uploadFile(companyId: string, bytes: Uint8Array, name: string, mimeType: string, imagesOnly = false) {
   await validateFile(bytes, mimeType, imagesOnly);
-  const existing = await prisma.storedFile.findFirst({where:{companyId,sha256:sha256(bytes)}});
-  if(existing)return {...existing,url:fileUrl(existing.id)};
+  const existing = await prisma.storedFile.findFirst({where:{companyId,sha256:sha256(bytes),mimeType,name:safeFileName(name)}});
+  if (existing) {
+    try {
+      const stored = await getStorage(existing.provider).read(existing.key);
+      if (stored.length === bytes.length && sha256(stored) === sha256(bytes)) return { ...existing, url: fileUrl(existing.id) };
+    } catch { console.warn("storage.dedup_object_unavailable", { id: existing.id }); }
+  }
   const provider = storageProvider(), storage = getStorage(provider);
   const key = `companies/${companyId}/${randomUUID()}`;
   const hash = sha256(bytes);

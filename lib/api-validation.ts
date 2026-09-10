@@ -51,6 +51,7 @@ export async function persistBodyMedia<T extends Record<string, unknown>>(body: 
 }
 
 function assertMetadataOnly(value: unknown, depth = 0): void {
+  if (typeof value === "number" && !Number.isFinite(value)) throw new Error("Número inválido.");
   if (depth > 15) throw new Error("Datos demasiado anidados.");
   if (typeof value === "string" && /data:[^;,]+;base64,/i.test(value)) throw new Error("Los archivos deben cargarse mediante los campos de medios.");
   if (value && typeof value === "object") for (const child of Object.values(value)) assertMetadataOnly(child, depth + 1);

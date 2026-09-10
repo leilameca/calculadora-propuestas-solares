@@ -184,4 +184,5 @@ model StoredFile {
   updatedAt DateTime @updatedAt
 
   @@index([companyId, createdAt])
+  @@index([companyId, sha256])
 }

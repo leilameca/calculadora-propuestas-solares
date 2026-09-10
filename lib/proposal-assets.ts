@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { decodeDataUrl } from "./storage/validation";
+import { decodeDataUrl, MAX_FILE_BYTES } from "./storage/validation";
 import { resolveMedia } from "./storage/files";
 import type { ProposalDocumentInput } from "./proposal-types";
 
@@ -8,7 +8,9 @@ export async function safeImage(value?: string) {
   try {
     const { bytes, mimeType } = decodeDataUrl(value);
     if (!mimeType.startsWith("image/")) return undefined;
-    const png = await sharp(bytes, { limitInputPixels: 20_000_000 }).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    let png = await sharp(bytes, { limitInputPixels: 20_000_000 }).rotate().resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    // A compact JPEG can expand beyond the upload limit when converted to PNG.
+    if (png.length > MAX_FILE_BYTES) png = await sharp(png).resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).png().toBuffer();
     return `data:image/png;base64,${png.toString("base64")}`;
   } catch { console.warn("proposal.image_unavailable"); return undefined; }
 }

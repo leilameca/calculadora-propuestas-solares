@@ -25,6 +25,13 @@ export async function validateFile(bytes: Uint8Array, mimeType: string, imagesOn
   const buffer = Buffer.from(bytes);
   if (mimeType === "application/pdf") {
     if (buffer.subarray(0, 5).toString() !== "%PDF-") throw new Error("La firma del archivo no corresponde a un PDF.");
+    const { PDFDocument, PDFDict, PDFName } = await import("pdf-lib");
+    const pdf = await PDFDocument.load(buffer);
+    if (pdf.getPageCount() < 1 || pdf.getPageCount() > 20) throw new Error("El PDF debe contener entre 1 y 20 páginas.");
+    for (const [, object] of pdf.context.enumerateIndirectObjects()) {
+      if (!(object instanceof PDFDict)) continue;
+      if (["OpenAction", "AA", "JS", "JavaScript", "EmbeddedFiles"].some(key => object.has(PDFName.of(key))) || ["/JavaScript", "/Launch"].includes(String(object.get(PDFName.of("S"))))) throw new Error("El PDF contiene acciones o archivos incrustados no admitidos.");
+    }
     return;
   }
   const meta = await sharp(buffer, { limitInputPixels: 20_000_000 }).metadata();

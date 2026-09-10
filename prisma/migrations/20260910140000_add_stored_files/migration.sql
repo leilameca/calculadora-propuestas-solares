@@ -21,3 +21,4 @@ CREATE INDEX "StoredFile_companyId_createdAt_idx" ON "StoredFile"("companyId", "
 
 -- AddForeignKey
 ALTER TABLE "StoredFile" ADD CONSTRAINT "StoredFile_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "StoredFile_companyId_sha256_idx" ON "StoredFile"("companyId", "sha256");
