@@ -1,3 +1,4 @@
+import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { sessionFromRequest } from "@/lib/auth";
@@ -29,7 +30,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const body = await request.json();
+  let body = mutationSchema.parse(await readJson(request));
+  body = await persistBodyMedia(body, session.companyId);
+  const equipmentIds = [body.selectedInverterId, body.calculationInput?.panelEquipmentId, body.calculationInput?.batteryEquipmentId].filter((id): id is string => typeof id === "string" && !!id);
+  if (equipmentIds.length && await prisma.equipmentInventory.count({where:{companyId:session.companyId,id:{in:[...new Set(equipmentIds)]}}}) !== new Set(equipmentIds).size) return NextResponse.json({error:"Equipo no encontrado."},{status:400});
 
   if (!body.customerName || !body.projectName || !body.calculationResult) {
     return NextResponse.json({ error: "Faltan datos obligatorios: cliente, proyecto o resultado." }, { status: 400 });
@@ -110,7 +114,10 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await sessionFromRequest(request);
   if (!session?.companyId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const body = await request.json();
+  let body = mutationSchema.parse(await readJson(request));
+  body = await persistBodyMedia(body, session.companyId);
+  const equipmentIds = [body.selectedInverterId, body.calculationInput?.panelEquipmentId, body.calculationInput?.batteryEquipmentId].filter((id): id is string => typeof id === "string" && !!id);
+  if (equipmentIds.length && await prisma.equipmentInventory.count({where:{companyId:session.companyId,id:{in:[...new Set(equipmentIds)]}}}) !== new Set(equipmentIds).size) return NextResponse.json({error:"Equipo no encontrado."},{status:400});
   const allowedStatuses = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"];
   if (!body.id) return NextResponse.json({ error: "La propuesta es obligatoria." }, { status: 400 });
   if (body.status && !allowedStatuses.includes(body.status)) return NextResponse.json({ error: "Estado de propuesta inválido." }, { status: 400 });
@@ -123,7 +130,7 @@ export async function PATCH(request: NextRequest) {
       if (body.customerName != null) {
         const current = await tx.proposal.findUnique({ where: { id: existing.id }, select: { customerId: true } });
         if (current) await tx.customer.update({
-          where: { id: current.customerId },
+          where: { id: current.customerId, companyId: session.companyId },
           data: {
             name: String(body.customerName).trim(),
             nic: body.customerNic == null ? undefined : String(body.customerNic).trim() || null,
@@ -136,7 +143,7 @@ export async function PATCH(request: NextRequest) {
           },
         });
       }
-      return tx.proposal.update({ where: { id: existing.id }, data: {
+      return tx.proposal.update({ where: { id: existing.id, companyId: session.companyId }, data: {
         status: body.status, version: body.version == null ? undefined : version,
         projectName: body.projectName == null ? undefined : String(body.projectName).trim(),
         systemType: body.systemType == null ? undefined : String(body.systemType),

@@ -1,3 +1,4 @@
+import { uploadFile } from "@/lib/storage/files";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (file.size > MAX_DOCUMENT_BYTES) return NextResponse.json({ error: "Cada documento debe pesar 4 MB o menos." }, { status: 413 });
     const equipment = await prisma.equipmentInventory.findFirst({ where: { id, companyId: session.companyId }, select: { id: true } });
     if (!equipment) return NextResponse.json({ error: "Equipo no encontrado." }, { status: 404 });
-    const data = `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`;
+    const data = (await uploadFile(session.companyId, new Uint8Array(await file.arrayBuffer()), file.name, file.type)).url;
     await prisma.equipmentInventory.update({ where: { id }, data: kind === "datasheet"
       ? { datasheetName: file.name, datasheetMimeType: file.type, datasheetData: data }
       : { certificateName: file.name, certificateMimeType: file.type, certificateData: data }

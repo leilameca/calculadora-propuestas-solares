@@ -1,3 +1,4 @@
+import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sessionFromRequest } from "@/lib/auth";
@@ -22,12 +23,13 @@ export async function POST(request: NextRequest) {
   try {
     const session = await sessionFromRequest(request);
     if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
-    const body = await request.json();
+    let body = mutationSchema.parse(await readJson(request));
+  body = await persistBodyMedia(body, session.companyId);
     if (!body.type || !body.brand || !body.model || !Number.isFinite(Number(body.unitCostUsd))) {
       return NextResponse.json({ error: "Tipo, marca, modelo y costo son obligatorios." }, { status: 400 });
     }
     const equipment = await prisma.equipmentInventory.create({ data: {
-      companyId: session.companyId, type: body.type, brand: String(body.brand).trim(), model: String(body.model).trim(),
+      companyId: session.companyId, type: body.type!, brand: String(body.brand).trim(), model: String(body.model).trim(),
       description: body.description ? String(body.description).trim() : null,
       powerWatts: body.powerWatts == null ? null : Number(body.powerWatts),
       capacityKwh: body.capacityKwh == null ? null : Number(body.capacityKwh),
@@ -45,14 +47,15 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await sessionFromRequest(request);
     if (!session?.companyId) return NextResponse.json({ error: "Falta tenant" }, { status: 401 });
-    const body = await request.json();
+    let body = mutationSchema.parse(await readJson(request));
+  body = await persistBodyMedia(body, session.companyId);
     if (!body.id || !body.type || !body.brand || !body.model || !Number.isFinite(Number(body.unitCostUsd))) {
       return NextResponse.json({ error: "Equipo, tipo, marca, modelo y costo son obligatorios." }, { status: 400 });
     }
     const existing = await prisma.equipmentInventory.findFirst({ where: { id: String(body.id), companyId: session.companyId }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: "Equipo no encontrado." }, { status: 404 });
     const equipment = await prisma.equipmentInventory.update({ where: { id: existing.id }, data: {
-      type: body.type, brand: String(body.brand).trim(), model: String(body.model).trim(),
+      type: body.type!, brand: String(body.brand).trim(), model: String(body.model).trim(),
       description: body.description ? String(body.description).trim() : null,
       powerWatts: body.powerWatts == null ? null : Number(body.powerWatts),
       capacityKwh: body.capacityKwh == null ? null : Number(body.capacityKwh),

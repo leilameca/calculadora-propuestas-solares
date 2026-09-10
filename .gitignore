@@ -19,3 +19,4 @@ output/
 
 .vercel
 .env*
+.storage/

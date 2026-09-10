@@ -1,3 +1,4 @@
+import { mutationSchema, persistBodyMedia, readJson } from "@/lib/api-validation";
 import { NextRequest, NextResponse } from "next/server";
 import { sessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -21,9 +22,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await sessionFromRequest(request);
-  const body = await request.json();
+  let body = mutationSchema.parse(await readJson(request));
   const companyId = session?.role === "SUPERADMIN" ? String(body.companyId || "") : session?.companyId;
   if (!companyId) return NextResponse.json({ error: "Selecciona una empresa para continuar." }, { status: 400 });
+  body = await persistBodyMedia(body, companyId);
   if (!body.name) return NextResponse.json({ error: "El nombre del cliente es obligatorio." }, { status: 400 });
   try {
     if (session?.role === "SUPERADMIN") {
@@ -58,9 +60,10 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const session = await sessionFromRequest(request);
-  const body = await request.json();
+  let body = mutationSchema.parse(await readJson(request));
   const companyId = session?.role === "SUPERADMIN" ? String(body.companyId || "") : session?.companyId;
   if (!companyId) return NextResponse.json({ error: "Selecciona una empresa para continuar." }, { status: 400 });
+  body = await persistBodyMedia(body, companyId);
   if (!body.id || !body.name) return NextResponse.json({ error: "Cliente y nombre son obligatorios." }, { status: 400 });
   try {
     const existing = await prisma.customer.findFirst({ where: { id: String(body.id), companyId }, select: { id: true } });
