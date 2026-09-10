@@ -1,43 +1,33 @@
 import type { PdfContext } from "../types";
-import { drawText, drawRect, PAGE_W, PAGE_H, MARGIN } from "../components/primitives";
+import { CONTENT_W, drawImageContain, drawImageCover, drawRect, drawText, MARGIN, PAGE_H, PAGE_W, wrap } from "../components/primitives";
 
 export function renderPage(ctx: PdfContext) {
-  const { pdf, input, helvetica, helveticaBold, primary, accent, muted, white, cover, backCover } = ctx;
-  const page8 = pdf.addPage([PAGE_W, PAGE_H]);
-  drawRect(page8, 0, 0, PAGE_W, PAGE_H, primary);
+  const { pdf, input, helvetica, helveticaBold, primary, secondary, accent, ink, muted, white, logo, cover, backCover } = ctx;
+  const page = pdf.addPage([PAGE_W, PAGE_H]);
+  drawText(page, "09 / CIERRE", MARGIN, PAGE_H - 38, helveticaBold, 8, accent);
+  drawText(page, "El siguiente paso debe sentirse sencillo.", MARGIN, PAGE_H - 82, helveticaBold, 26, ink, { width: CONTENT_W });
 
-  if (backCover || cover) {
-    const coverW = PAGE_W;
-    const coverH = 300;
-    page8.drawImage((backCover || cover)!, { x: 0, y: PAGE_H - coverH, width: coverW, height: coverH });
+  const image = backCover || cover;
+  const blockY = 180;
+  const blockH = 455;
+  if (image) {
+    drawImageCover(page, image, MARGIN, blockY, CONTENT_W, blockH);
+    page.drawRectangle({ x: MARGIN, y: blockY, width: CONTENT_W, height: blockH, color: ink, opacity: .52 });
+  } else {
+    drawRect(page, MARGIN, blockY, CONTENT_W, blockH, primary);
+    page.drawRectangle({ x: MARGIN + CONTENT_W * .64, y: blockY, width: CONTENT_W * .36, height: blockH, color: secondary, opacity: .9 });
+    drawRect(page, MARGIN + CONTENT_W * .80, blockY, CONTENT_W * .20, blockH * .36, accent);
   }
+  drawText(page, "TRANSFORMEMOS", MARGIN + 28, blockY + 285, helveticaBold, 27, white, { width: CONTENT_W - 56 });
+  drawText(page, "SU ENERGÍA.", MARGIN + 28, blockY + 252, helveticaBold, 27, white, { width: CONTENT_W - 56 });
+  if (input.company.slogan) wrap(input.company.slogan, helvetica, 11, CONTENT_W - 56).slice(0, 3).forEach((line, index) => drawText(page, line, MARGIN + 28, blockY + 205 - index * 16, helvetica, 11, white));
 
-  drawText(page8, "Transformemos su energía", PAGE_W / 2, PAGE_H - 380, helveticaBold, 28, white, { align: "center" });
-  drawText(page8, "Solicite su cotización sin compromiso — sin costo ni obligación.", PAGE_W / 2, PAGE_H - 410, helvetica, 12, white, { align: "center" });
-
-  const contactY = PAGE_H - 480;
-  drawText(page8, "TELÉFONO", PAGE_W / 2, contactY, helveticaBold, 10, accent, { align: "center" });
-  drawText(page8, input.company.phone || "N/D", PAGE_W / 2, contactY - 18, helvetica, 12, white, { align: "center" });
-  drawText(page8, "EMAIL", PAGE_W / 2, contactY - 50, helveticaBold, 10, accent, { align: "center" });
-  drawText(page8, input.company.email || "N/D", PAGE_W / 2, contactY - 68, helvetica, 12, white, { align: "center" });
-  drawText(page8, "UBICACIÓN", PAGE_W / 2, contactY - 100, helveticaBold, 10, accent, { align: "center" });
-  drawText(page8, input.company.address || "República Dominicana", PAGE_W / 2, contactY - 118, helvetica, 12, white, { align: "center" });
-
-  const badgeY = 95;
-  const badgeW = (PAGE_W - 2 * MARGIN - 20) / 3;
-  drawRect(page8, MARGIN, badgeY, badgeW, 50, white);
-  drawText(page8, "25+", MARGIN + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
-  drawText(page8, "AÑOS VIDA ÚTIL", MARGIN + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
-
-  drawRect(page8, MARGIN + badgeW + 10, badgeY, badgeW, 50, white);
-  drawText(page8, "0", MARGIN + badgeW + 10 + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
-  drawText(page8, "EMISIÓN CO₂", MARGIN + badgeW + 10 + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
-
-  drawRect(page8, MARGIN + 2 * (badgeW + 10), badgeY, badgeW, 50, white);
-  drawText(page8, "24/7", MARGIN + 2 * (badgeW + 10) + badgeW / 2, badgeY + 18, helveticaBold, 16, primary, { align: "center" });
-  drawText(page8, "SOPORTE TÉCNICO", MARGIN + 2 * (badgeW + 10) + badgeW / 2, badgeY + 4, helvetica, 8, muted, { align: "center" });
-
-  drawText(page8, `${input.company.name.toUpperCase()}  ·  RD`, PAGE_W / 2, 40, helveticaBold, 12, white, { align: "center" });
-  drawText(page8, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, white, { align: "right" });
-
+  if (logo) drawImageContain(page, logo, MARGIN, 102, 125, 42);
+  else drawText(page, input.company.name, MARGIN, 120, helveticaBold, 11, ink, { width: 150 });
+  const contacts = [input.company.phone, input.company.email, input.company.website].filter((value): value is string => Boolean(value));
+  if (contacts.length) drawText(page, contacts.join(" · "), MARGIN + 155, 120, helvetica, 8, muted, { width: CONTENT_W - 155 });
+  const identity = [input.company.address, input.company.rnc ? `RNC ${input.company.rnc}` : ""].filter(Boolean).join(" · ");
+  if (identity) drawText(page, identity, MARGIN + 155, 103, helvetica, 8, muted, { width: CONTENT_W - 155 });
+  if (input.company.proposalValidityDays) drawText(page, `Vigencia: ${input.company.proposalValidityDays} días`, MARGIN, 72, helvetica, 8, muted);
+  drawText(page, "09", PAGE_W - MARGIN, 28, helvetica, 7.5, muted, { align: "right" });
 }

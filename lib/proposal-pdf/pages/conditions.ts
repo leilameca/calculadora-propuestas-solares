@@ -1,54 +1,51 @@
 import type { PdfContext } from "../types";
-import { drawText, drawRect, drawLine, PAGE_W, PAGE_H, MARGIN, CONTENT_W } from "../components/primitives";
+import { CONTENT_W, drawLine, drawRect, drawText, formatDop, formatUsd, MARGIN, metricCard, pageFooter, sectionPage } from "../components/primitives";
 
 export function renderPage(ctx: PdfContext) {
-  const { pdf, input, helvetica, helveticaBold, primary, secondary, accent, ink, muted, light, white } = ctx;
-  const page5 = pdf.addPage([PAGE_W, PAGE_H]);
-  drawRect(page5, 0, PAGE_H - 60, PAGE_W, 60, primary);
-  drawText(page5, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
-  drawText(page5, "04", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
-
-  let y = PAGE_H - 100;
-  drawText(page5, "Marco Legal y Beneficios", MARGIN, y, helveticaBold, 18, primary);
-  y -= 20;
-  drawText(page5, "Ley 57-07", MARGIN, y, helveticaBold, 14, secondary);
-  y -= 30;
-
-  drawText(page5, "BENEFICIOS DE LA LEY 57-07", MARGIN, y, helveticaBold, 12, primary);
-  y -= 24;
-  const benefits = [
-    ["Exención de impuestos de importación", "Cap. III — Art. 9"],
-    ["Exención de impuesto sobre la renta", "Cap. III — Art. 10"],
-    ["Reducción de impuestos por financiamiento externo", "Cap. III — Art. 11"],
-    ["Crédito fiscal hasta 40% del costo de inversión", "Cap. III — Art. 12"],
+  const { input, helvetica, helveticaBold, primary, secondary, accent, ink, muted, light, white } = ctx;
+  const page = sectionPage(ctx, "05", "Ahorro y retorno", "Proyección financiera basada en la generación y tarifa configuradas en HelioPro.");
+  const metrics: Array<[string, string, typeof primary, boolean?]> = [
+    [formatDop(input.result.annualSavingsDop), "Ahorro anual estimado", primary],
+    ...(Number.isFinite(input.result.roiYears) ? [[`${input.result.roiYears.toFixed(1)} años`, "Retorno estimado", secondary] as [string, string, typeof primary]] : []),
+    [formatUsd(ctx.quoteTotal), "Inversión total", accent, false],
   ];
-  for (const [benefit, ref] of benefits) {
-    drawRect(page5, MARGIN, y - 24, CONTENT_W, 24, light);
-    drawText(page5, benefit, MARGIN + 10, y - 8, helvetica, 10, ink);
-    drawText(page5, ref, PAGE_W - MARGIN - 10, y - 8, helveticaBold, 10, secondary, { align: "right" });
-    y -= 30;
-  }
+  const gap = 10;
+  const cardW = (CONTENT_W - gap * (metrics.length - 1)) / metrics.length;
+  metrics.forEach(([value, label, color, lightText], index) => metricCard(ctx, page, MARGIN + index * (cardW + gap), 575, cardW, value, label, color, lightText !== false));
 
-  y -= 20;
-  drawText(page5, "NOTAS Y DATOS IMPORTANTES", MARGIN, y, helveticaBold, 12, primary);
-  y -= 24;
-  const notes = [
-    "Los pagos se realizan en USD o DOP a la tasa de venta del Banco Central del día.",
-    "Los sistemas de inyección a red dejan de producir si se interrumpe el suministro eléctrico.",
-    "El cálculo estimado se basa en el promedio de consumo anual del cliente.",
-    "Equipos sujetos a disponibilidad; pueden reemplazarse por similares o superiores.",
-  ];
-  for (const note of notes) {
-    drawText(page5, `—  ${note}`, MARGIN + 10, y, helvetica, 10, ink);
-    y -= 20;
-  }
+  drawText(page, "PROYECCIÓN A 25 AÑOS", MARGIN, 530, helveticaBold, 9, secondary);
+  const rows = input.result.projection25Years.filter(row => [1, 5, 10, 15, 20, 25].includes(row.year));
+  let y = 500;
+  const widths = [CONTENT_W * .16, CONTENT_W * .28, CONTENT_W * .26, CONTENT_W * .30];
+  drawRect(page, MARGIN, y, CONTENT_W, 24, primary);
+  ["AÑO", "GENERACIÓN", "AHORRO", "AHORRO ACUMULADO"].forEach((label, index) => {
+    const x = MARGIN + widths.slice(0, index).reduce((sum, width) => sum + width, 0);
+    drawText(page, label, x + 8, y + 8, helveticaBold, 7.5, white, { width: widths[index] - 16 });
+  });
+  y -= 2;
+  rows.forEach((row, index) => {
+    y -= 38;
+    drawRect(page, MARGIN, y, CONTENT_W, 36, index % 2 ? white : light);
+    const values = [String(row.year), `${Math.round(row.generationKwh).toLocaleString("es-DO")} kWh`, formatDop(row.savingsDop), formatDop(row.accumulatedSavingsDop)];
+    values.forEach((value, column) => {
+      const x = MARGIN + widths.slice(0, column).reduce((sum, width) => sum + width, 0);
+      drawText(page, value, x + 8, y + 13, column === 3 ? helveticaBold : helvetica, 8.5, column === 3 ? secondary : ink, { width: widths[column] - 16 });
+    });
+  });
 
-  y -= 20;
-  drawRect(page5, MARGIN, y - 50, CONTENT_W, 50, light);
-  drawText(page5, "Importante.", MARGIN + 12, y - 16, helveticaBold, 9, primary);
-  drawText(page5, "El cliente deberá cubrir entre RD$7,800 – RD$12,000 anuales durante 3 años por gastos de exoneración de impuestos (Ley 57-07).", MARGIN + 12, y - 30, helvetica, 9, muted);
-
-  drawLine(page5, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
-  drawText(page5, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
-
+  const chartY = 118;
+  const chartH = 105;
+  const values = input.result.projection25Years.map(row => row.accumulatedSavingsDop);
+  const max = Math.max(1, ...values);
+  const step = CONTENT_W / Math.max(1, values.length - 1);
+  drawText(page, "CRECIMIENTO DEL AHORRO ACUMULADO", MARGIN, chartY + chartH + 30, helveticaBold, 8, primary);
+  values.forEach((value, index) => {
+    if (!index) return;
+    const previous = values[index - 1];
+    drawLine(page, MARGIN + (index - 1) * step, chartY + chartH * previous / max, MARGIN + index * step, chartY + chartH * value / max, accent, 2);
+  });
+  drawLine(page, MARGIN, chartY, MARGIN + CONTENT_W, chartY, muted, .5);
+  drawText(page, "1", MARGIN, chartY - 14, helvetica, 7, muted);
+  drawText(page, "25 años", MARGIN + CONTENT_W, chartY - 14, helvetica, 7, muted, { align: "right" });
+  pageFooter(ctx, page);
 }

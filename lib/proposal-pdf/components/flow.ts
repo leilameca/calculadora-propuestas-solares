@@ -6,14 +6,14 @@ import { CONTENT_W, drawRect, drawText, MARGIN, PAGE_H, PAGE_W, wrap } from "./p
 export class PdfFlow {
   page!: PDFPage;
   y = 0;
-  constructor(private readonly ctx: PdfContext, private readonly heading: string) { this.pageBreak(); }
+  constructor(private readonly ctx: PdfContext, private readonly heading: string, private readonly sectionNumber?: string) { this.pageBreak(); }
   pageBreak() {
-    const { pdf, primary, white, helveticaBold } = this.ctx;
+    const { pdf, accent, ink, muted, helvetica, helveticaBold } = this.ctx;
     this.page = pdf.addPage([PAGE_W, PAGE_H]);
-    drawRect(this.page, 0, PAGE_H - 60, PAGE_W, 60, primary);
-    drawText(this.page, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 32, helveticaBold, 16, white);
-    drawText(this.page, this.heading, MARGIN, PAGE_H - 95, helveticaBold, 18, primary);
-    this.y = PAGE_H - 120;
+    drawText(this.page, `${this.sectionNumber ? `${this.sectionNumber} / ` : ""}${this.heading.toUpperCase()}`, MARGIN, PAGE_H - 38, helveticaBold, 8, accent, { width: CONTENT_W });
+    drawText(this.page, this.heading, MARGIN, PAGE_H - 82, helveticaBold, 25, ink, { width: CONTENT_W });
+    drawText(this.page, this.ctx.input.company.name, MARGIN, PAGE_H - 103, helvetica, 8, muted, { width: CONTENT_W });
+    this.y = PAGE_H - 135;
   }
   ensure(height: number) { if (this.y - height < 65) this.pageBreak(); }
   paragraph(text: string, bold = false, size = 10) {

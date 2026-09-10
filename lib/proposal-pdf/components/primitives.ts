@@ -1,4 +1,5 @@
-import { rgb, type PDFFont, type PDFPage, type PDFPageDrawTextOptions, type RGB } from "pdf-lib";
+import { clip, endPath, popGraphicsState, pushGraphicsState, rectangle, rgb, type PDFFont, type PDFImage, type PDFPage, type PDFPageDrawTextOptions, type RGB } from "pdf-lib";
+import type { PdfContext } from "../types";
 export const PAGE_W = 612, PAGE_H = 792, MARGIN = 48, CONTENT_W = PAGE_W - MARGIN * 2;
 export function safeText(value: unknown): string {
   return String(value ?? "").normalize("NFC").replace(/₂/g, "2").replace(/→/g, "->").replace(/[\u2010-\u2015]/g, "-").replace(/[^\x20-\x7e\xa0-\xff\n\r\t€‘’“”•…]/gu, "?");
@@ -30,6 +31,36 @@ export function drawText(page: PDFPage, text: string, x: number, y: number, font
 }
 export function drawRect(page: PDFPage, x: number, y: number, width: number, height: number, color: RGB) { page.drawRectangle({ x, y, width, height, color }); }
 export function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, color: RGB, thickness = 1) { page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color, thickness }); }
+export function drawImageContain(page: PDFPage, image: PDFImage, x: number, y: number, width: number, height: number) {
+  const size = image.scaleToFit(width, height);
+  page.drawImage(image, { x: x + (width - size.width) / 2, y: y + (height - size.height) / 2, ...size });
+}
+export function drawImageCover(page: PDFPage, image: PDFImage, x: number, y: number, width: number, height: number) {
+  const scale = Math.max(width / image.width, height / image.height);
+  const renderedWidth = image.width * scale;
+  const renderedHeight = image.height * scale;
+  page.pushOperators(pushGraphicsState(), rectangle(x, y, width, height), clip(), endPath());
+  page.drawImage(image, { x: x - (renderedWidth - width) / 2, y: y - (renderedHeight - height) / 2, width: renderedWidth, height: renderedHeight });
+  page.pushOperators(popGraphicsState());
+}
+export function sectionPage(ctx: PdfContext, number: string, title: string, subtitle?: string) {
+  const page = ctx.pdf.addPage([PAGE_W, PAGE_H]);
+  drawText(page, `${number} / ${title.toUpperCase()}`, MARGIN, PAGE_H - 38, ctx.helveticaBold, 8, ctx.accent, { width: CONTENT_W });
+  drawText(page, title, MARGIN, PAGE_H - 82, ctx.helveticaBold, 27, ctx.ink, { width: CONTENT_W });
+  if (subtitle) drawText(page, subtitle, MARGIN, PAGE_H - 103, ctx.helvetica, 9, ctx.muted, { width: CONTENT_W });
+  return page;
+}
+export function pageFooter(ctx: PdfContext, page: PDFPage) {
+  drawLine(page, MARGIN, 40, PAGE_W - MARGIN, 40, ctx.primary, 1.5);
+  drawText(page, ctx.input.company.name, MARGIN, 26, ctx.helveticaBold, 8, ctx.primary, { width: CONTENT_W - 55 });
+}
+export function metricCard(ctx: PdfContext, page: PDFPage, x: number, y: number, width: number, value: string, label: string, color: RGB, lightText = true) {
+  void lightText;
+  drawRect(page, x, y, width, 70, ctx.light);
+  drawRect(page, x, y, 3, 70, color);
+  drawText(page, value, x + 12, y + 38, ctx.helveticaBold, 17, color, { width: width - 24 });
+  drawText(page, label.toUpperCase(), x + 12, y + 17, ctx.helveticaBold, 7.5, ctx.muted, { width: width - 24 });
+}
 export const formatUsd = (value: number) => `US$ ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const formatDop = (value: number) => `RD$ ${Math.round(value).toLocaleString("es-DO")}`;
 export const formatNum = (value: number) => Math.round(value).toLocaleString("es-DO");

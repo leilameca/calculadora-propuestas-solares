@@ -1,5 +1,8 @@
 import type { PDFDocument, PDFFont, PDFImage, RGB } from "pdf-lib";
 import type { ProposalDocumentInput } from "../proposal-types";
+export interface ProposalTheme {
+  primary: RGB; secondary: RGB; accent: RGB; ink: RGB; muted: RGB; light: RGB; white: RGB;
+}
 export interface PdfContext {
   pdf: PDFDocument; input: ProposalDocumentInput;
   helvetica: PDFFont; helveticaBold: PDFFont; helveticaOblique: PDFFont;
@@ -7,4 +10,6 @@ export interface PdfContext {
   date: string; quoteSubtotal: number; quoteTax: number; quoteTotal: number; quoteTotalDop: number; quotePricePerWp: number;
   customerLogo: PDFImage | null;
   logo: PDFImage | null; cover: PDFImage | null; backCover: PDFImage | null;
+  equipmentLogos: Map<string, PDFImage>;
+  theme: ProposalTheme;
 }

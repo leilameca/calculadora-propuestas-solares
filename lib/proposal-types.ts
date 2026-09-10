@@ -10,7 +10,7 @@ export interface ProposalDocumentInput {
   date?: string;
   selectedEquipmentIds?: string[];
   attachments?: Array<{ equipmentName:string; kind:"DATASHEET"|"CERTIFICATE"; fileName:string; mimeType:string; dataUrl:string }>;
-  selectedEquipment?: Array<{name:string;type:string;warrantyYears?:number|null;logoUrl?:string|null}>;
+  selectedEquipment?: Array<{name:string;type:string;brand?:string;model?:string;description?:string|null;powerWatts?:number|null;capacityKwh?:number|null;quantity?:number;warrantyYears?:number|null;logoUrl?:string|null}>;
   invoice?: {name:string;mimeType:string;dataUrl:string};
   proposalText?:string;
 }

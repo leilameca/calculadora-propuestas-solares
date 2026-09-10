@@ -20,7 +20,7 @@ export const proposalSchema = z.object({
   quoteItems: z.array(z.object({ name: string, description: z.string().max(10000).nullish().transform(value => value || undefined), quantity: number.optional(), amountUsd: number })).max(200).nullish().transform(value => value ?? []),
   proposalNumber: optional, date: optional, proposalText: z.string().max(30000).nullish().transform(value => value || undefined),
   invoice: media.nullish().transform(value => value ?? undefined), selectedEquipmentIds: z.array(z.string().max(100)).max(100).optional(),
-  selectedEquipment: z.array(z.object({ name: string, type: string, warrantyYears: number.optional(), logoUrl: image })).max(100).optional(),
+  selectedEquipment: z.array(z.object({ name: string, type: string, brand: optional, model: optional, description: optional, powerWatts: number.optional(), capacityKwh: number.optional(), quantity: number.optional(), warrantyYears: number.optional(), logoUrl: image })).max(100).optional(),
   attachments: z.array(z.object({ equipmentName: string, kind: z.enum(["DATASHEET", "CERTIFICATE"]), fileName: string, mimeType: string, dataUrl: image.transform(value => value ?? "") })).max(100).optional(),
 });
 

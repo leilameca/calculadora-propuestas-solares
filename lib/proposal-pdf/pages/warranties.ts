@@ -1,41 +1,30 @@
 import type { PdfContext } from "../types";
-import { drawText, drawRect, drawLine, PAGE_W, PAGE_H, MARGIN, CONTENT_W } from "../components/primitives";
+import { CONTENT_W, drawRect, drawText, MARGIN, pageFooter, sectionPage } from "../components/primitives";
+
+const LABELS: Record<string, string> = { PANEL: "Panel", INVERTER: "Inversor", BATTERY: "Batería" };
 
 export function renderPage(ctx: PdfContext) {
-  const { pdf, input, helvetica, helveticaBold, primary, secondary, accent, ink, muted, light, white } = ctx;
-  const page6 = pdf.addPage([PAGE_W, PAGE_H]);
-  drawRect(page6, 0, PAGE_H - 60, PAGE_W, 60, primary);
-  drawText(page6, "PROPUESTA ENERGÉTICA", MARGIN, PAGE_H - 30, helveticaBold, 16, white);
-  drawText(page6, "05", PAGE_W - MARGIN, PAGE_H - 30, helveticaBold, 16, accent, { align: "right" });
+  const page = sectionPage(ctx, "07", "Garantías", "Respaldo informado directamente desde los equipos seleccionados.");
+  const items = (ctx.input.selectedEquipment ?? []).filter(item => item.warrantyYears && item.warrantyYears > 0);
+  const gap = 10;
+  const cardW = (CONTENT_W - gap * (items.length - 1)) / items.length;
+  items.forEach((item, index) => {
+    const x = MARGIN + index * (cardW + gap);
+    drawRect(page, x, 560, cardW, 82, ctx.light);
+    drawText(page, `${item.warrantyYears} años`, x + 14, 603, ctx.helveticaBold, 18, index === items.length - 1 ? ctx.accent : ctx.ink, { width: cardW - 28 });
+    drawText(page, (LABELS[item.type] || item.type).toUpperCase(), x + 14, 580, ctx.helveticaBold, 7.5, ctx.muted, { width: cardW - 28 });
+  });
 
-  let y = PAGE_H - 100;
-  drawText(page6, "Garantías del Sistema", MARGIN, y, helveticaBold, 18, primary);
-  y -= 20;
-  drawText(page6, "Respaldo total en equipos y servicio", MARGIN, y, helvetica, 12, muted);
-  y -= 40;
-
-  const warranties = [
-    ["Panel Solar Fotovoltaico", "GARANTÍA DEL PRODUCTO", "10 años", "GARANTÍA DE RENDIMIENTO", "30 años", primary],
-    ["Inversor de Red", "GARANTÍA DEL PRODUCTO", "5 años", "GARANTÍA DE RENDIMIENTO", "10 años", secondary],
-    ["Soporte Técnico", "SOPORTE INCLUIDO", "2 años", "ASISTENCIA", "24/7", accent],
-  ] as const;
-
-  for (const [title, label1, value1, label2, value2, color] of warranties) {
-    drawRect(page6, MARGIN, y - 80, CONTENT_W, 80, light);
-    drawRect(page6, MARGIN, y - 80, 6, 80, color);
-    drawText(page6, title, MARGIN + 20, y - 20, helveticaBold, 14, ink);
-    drawText(page6, label1, MARGIN + 20, y - 40, helvetica, 9, muted);
-    drawText(page6, value1, MARGIN + 20, y - 56, helveticaBold, 12, color);
-    drawText(page6, label2, MARGIN + 200, y - 40, helvetica, 9, muted);
-    drawText(page6, value2, MARGIN + 200, y - 56, helveticaBold, 12, color);
-    y -= 100;
-  }
-
-  y -= 20;
-  drawRect(page6, MARGIN, y - 40, CONTENT_W, 40, primary);
-  drawText(page6, `${input.company.name.toUpperCase()}  ·  25+ AÑOS DE VIDA ÚTIL  ·  0 EMISIÓN DE CO₂  ·  SOPORTE TÉCNICO 24/7`, PAGE_W / 2, y - 14, helveticaBold, 9, white, { align: "center" });
-
-  drawLine(page6, MARGIN, 40, PAGE_W - MARGIN, 40, primary, 2);
-  drawText(page6, `${input.company.name.toUpperCase()}  ·  ENERGÍA SOLAR`, PAGE_W - MARGIN, 28, helveticaBold, 8, primary, { align: "right" });
-
+  drawText(page, "COBERTURA POR EQUIPO", MARGIN, 515, ctx.helveticaBold, 8, ctx.accent);
+  let y = 475;
+  items.forEach((item, index) => {
+    drawRect(page, MARGIN, y - 58, CONTENT_W, 58, index % 2 ? ctx.white : ctx.light);
+    drawText(page, item.name, MARGIN + 16, y - 23, ctx.helveticaBold, 11, ctx.ink, { width: CONTENT_W * .65 });
+    drawText(page, `${item.warrantyYears} años`, PAGE_W_FROM_MARGIN, y - 23, ctx.helveticaBold, 11, ctx.secondary, { align: "right", width: CONTENT_W * .25 });
+    y -= 70;
+  });
+  drawText(page, "Las condiciones específicas se rigen por la documentación vigente de cada fabricante.", MARGIN, y - 10, ctx.helvetica, 8.5, ctx.muted, { width: CONTENT_W });
+  pageFooter(ctx, page);
 }
+
+const PAGE_W_FROM_MARGIN = MARGIN + CONTENT_W - 16;
