@@ -43,9 +43,9 @@ export async function buildProposalPdf(value: ProposalDocumentInput): Promise<Ui
   if (input.selectedEquipment?.length) equipmentPage(ctx);
   if (input.selectedEquipment?.some(item => item.warrantyYears)) warrantiesPage(ctx);
   phasesPage(ctx);
+  await appendAttachments(ctx);
   backPage(ctx);
   const closingPageIndex = pdf.getPageCount() - 1;
-  await appendAttachments(ctx);
   pdf.getPages().forEach((page, i) => {
     if (page.getWidth() === PAGE_W && i !== 0 && i !== closingPageIndex) drawText(page, String(i + 1).padStart(2, "0"), PAGE_W - MARGIN, 16, ctx.helvetica, 8, ctx.muted, { align: "right" });
   });

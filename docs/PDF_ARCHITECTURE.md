@@ -15,6 +15,9 @@ Se mantienen pdf-lib y docx. `lib/pdf-builder.ts` es una fachada compatible; `li
 - `components/chart.ts`: gráfico reutilizable que distingue consumo real, promedio de referencia y generación proyectada.
 - `pages/`: portada, resumen ejecutivo, solución/inversión, consumo/generación, ahorro/retorno, equipos, garantías, proceso, cierre y anexos condicionales. Las páginas editoriales usan componentes comunes; las cotizaciones largas conservan el flujo paginado.
 
+
+El orden final es propuesta comercial, factura, datasheets, certificados y despedida. La despedida siempre se genera como la última página y usa la imagen de cierre configurada en el perfil; si no existe una selección explícita, usa la última imagen de la galería y finalmente la portada como respaldo.
+
 ## Causas corregidas
 
 El checkout inicial contenía declaraciones duplicadas (quoteTax/badgeY/badgeW), tipo PDF diferente al DOCX, exchangeRate ausente, `align` pasado a una API que no lo acepta y un renombre parcial quotePricePerKwp. Ahora los cálculos y tipos son comunes; alineación mide el ancho real. USD/Wp divide kWp por 1000 y respeta ITBIS desactivado o tasa cero.

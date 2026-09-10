@@ -74,6 +74,7 @@ describe("proposal exports", () => {
 
     expect(text.indexOf("Factura eléctrica")).toBeLessThan(text.indexOf("Datasheet · Panel"));
     expect(text.indexOf("Datasheet · Panel")).toBeLessThan(text.indexOf("Certificado · Panel"));
+    expect(text.indexOf("Certificado · Panel")).toBeLessThan(text.indexOf("El siguiente paso debe sentirse sencillo."));
     expect((await PDFDocument.load(pdf)).getPageCount()).toBe(12);
   });
 });

@@ -51,10 +51,12 @@ export function CompanyProfileForm() {
   useEffect(() => {
     fetch("/api/company").then((response) => response.ok ? response.json() : null).then((data) => {
       if (!data) return;
+      const coverImages = Array.isArray(data.coverImages) ? data.coverImages : [];
       setForm({ ...fallback, ...data,
         itbisRate: data.itbisRate == null ? 0.18 : Number(data.itbisRate),
-        coverImages: Array.isArray(data.coverImages) ? data.coverImages : [],
-        coverImageUrl: data.coverImageUrl || "", backCoverImageUrl: data.backCoverImageUrl || "",
+        coverImages,
+        coverImageUrl: data.coverImageUrl || coverImages[0] || "",
+        backCoverImageUrl: data.backCoverImageUrl || coverImages.at(-1) || coverImages[0] || "",
       });
     }).catch(() => undefined);
   }, []);
@@ -84,8 +86,10 @@ export function CompanyProfileForm() {
     event.preventDefault(); setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/company", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      setMessage(response.ok ? "Perfil, portadas y reglas fiscales guardados." : "No se pudo guardar. Inicia sesión con una cuenta administradora.");
-    } finally { setBusy(false); }
+      const data = response.ok ? null : await response.json().catch(() => null);
+      setMessage(response.ok ? "Perfil, portadas y reglas fiscales guardados." : data?.error || "No se pudo guardar el perfil.");
+    } catch { setMessage("Error de red al guardar el perfil."); }
+    finally { setBusy(false); }
   }
 
   const commercialFields: Array<[keyof CompanyForm, string, string]> = [

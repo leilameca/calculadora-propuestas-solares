@@ -152,77 +152,101 @@ export function SolarCalculatorApp() {
     if(records.length){const latest=records.at(-1)!;setBilledRecords(records);setLastBilledMonth(latest.month);setLastBilledYear(latest.year);setConsumption(MONTHS.map((_,i)=>records.findLast(row=>row.month===i+1)?.kwh??0));clearAverage();}
     setPendingBill(null);setOcrMessage(`Datos confirmados: ${records.length} meses. Complete los meses faltantes antes de calcular.`);
   }
-  async function saveDraft() {
-    if (!result) return;
+  function proposalMutationBody() {
+    if (!result) return null;
     const selectedInverter=inventory.find((item)=>item.type==="INVERTER"&&equipmentLabel(item)===inputs.inverter);
     const selectedBattery=inventory.find((item)=>item.type==="BATTERY"&&equipmentLabel(item)===inputs.battery);
+    return {
+      id: editingId,
+      customerName: inputs.client || "Cliente de demostración",
+      customerId: customers.find((customer)=>customer.name===inputs.client&&customer.nic===inputs.nic)?.id || null,
+      customerNic: inputs.nic || null,
+      customerAddress: inputs.address || null,
+      customerLogo:customerLogo||null,
+      customerProjectImage:projectImage||null,
+      projectName: "Sistema Solar Fotovoltaico",
+      systemType: inputs.systemType,
+      city: inputs.city,
+      utility: inputs.utility,
+      tariff: inputs.tariff,
+      monthlyConsumption: consumption,
+      calculationInput: { ...inputs, utilityBill:confirmedBill, batteryEquipmentId:selectedBattery?.id||null, hsp: HSP_BY_CITY[inputs.city], billedRecords, averageCount, averageConsumption, useAverage:averageConsumption!==null,lastBilledMonth,lastBilledYear },
+      calculationResult: result,
+      quoteItems: quoteItems(),
+      selectedInverterId: selectedInverter?.id || null,
+      manualInverter: selectedInverter ? null : inputs.inverter || null,
+      exchangeRate: inputs.exchangeRate,
+      ...quoteTotals(),
+      notes:proposalText||null,
+      projectImageUrl:projectImage||null,
+      invoiceName:invoice?.name||null,
+      invoiceMimeType:invoice?.mimeType||null,
+      invoiceData:invoice?.dataUrl||null,
+    };
+  }
+
+  async function persistProposal() {
+    const body = proposalMutationBody();
+    if (!body) throw new Error("Calcule la propuesta antes de guardarla.");
+    const response = await fetch("/api/proposals", {
+      method: editingId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || "No se pudo guardar la propuesta.");
+    const saved = data as { id: string; number: string };
+    if (!editingId) {
+      setEditingId(saved.id);
+      setEditingNumber(saved.number);
+      window.history.replaceState(null,"",`/dashboard/calculator?proposal=${encodeURIComponent(saved.id)}`);
+    }
+    return saved;
+  }
+
+  async function saveDraft() {
+    if (!result) return;
+    const wasEditing = Boolean(editingId);
     setSaving(true);
     setSaveMessage("");
     try {
-      const response = await fetch("/api/proposals", {
-        method: editingId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingId,
-          customerName: inputs.client || "Cliente de demostración",
-          customerId: customers.find((customer)=>customer.name===inputs.client&&customer.nic===inputs.nic)?.id || null,
-          customerNic: inputs.nic || null,
-          customerAddress: inputs.address || null,
-          customerLogo:customerLogo||null,
-          customerProjectImage:projectImage||null,
-          projectName: "Sistema Solar Fotovoltaico",
-          systemType: inputs.systemType,
-          city: inputs.city,
-          utility: inputs.utility,
-          tariff: inputs.tariff,
-          monthlyConsumption: consumption,
-          calculationInput: { ...inputs, utilityBill:confirmedBill, batteryEquipmentId:selectedBattery?.id||null, hsp: HSP_BY_CITY[inputs.city], billedRecords, averageCount, averageConsumption, useAverage:averageConsumption!==null,lastBilledMonth,lastBilledYear },
-          calculationResult: result,
-          quoteItems: quoteItems(),
-          selectedInverterId: selectedInverter?.id || null,
-          manualInverter: selectedInverter ? null : inputs.inverter || null,
-          exchangeRate: inputs.exchangeRate,
-          ...quoteTotals(),
-          notes:proposalText||null,projectImageUrl:projectImage||null,invoiceName:invoice?.name||null,invoiceMimeType:invoice?.mimeType||null,invoiceData:invoice?.dataUrl||null,
-        }),
-      });
-      const data = await response.json();
-      if(response.ok&&!editingId){setEditingId(data.id);setEditingNumber(data.number);window.history.replaceState(null,"",`/dashboard/calculator?proposal=${encodeURIComponent(data.id)}`);}
-      setSaveMessage(response.ok ? `${editingId ? "Cambios guardados" : "Borrador guardado"}: ${data.number}` : data.error || "No se pudo guardar.");
-    } catch {
-      setSaveMessage("Error de red al guardar el borrador.");
+      const saved = await persistProposal();
+      setSaveMessage(`${wasEditing ? "Cambios guardados" : "Borrador guardado"}: ${saved.number}`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Error de red al guardar el borrador.");
     } finally {
       setSaving(false);
     }
   }
 
-  function proposalPayload() {
-    if (!result) return null;
-    const selectedInverter=inventory.find((item)=>item.type==="INVERTER"&&equipmentLabel(item)===inputs.inverter),selectedBattery=inventory.find((item)=>item.type==="BATTERY"&&equipmentLabel(item)===inputs.battery);
-    return { company:{...company,logoBase64:company.logoUrl,coverImageBase64:projectImage||company.coverImageUrl||company.coverImages?.[0],backCoverImageBase64:company.backCoverImageUrl||company.coverImages?.[1]||company.coverImages?.[0],itbisEnabled:inputs.itbisEnabled,itbisRate:inputs.itbisRate}, customer:{name:inputs.client||"Cliente de demostración",nic:inputs.nic||"N/D",address:inputs.address||inputs.city,logoBase64:customerLogo||undefined}, project:{name:"Sistema Solar Fotovoltaico",city:inputs.city,utility:inputs.utility,tariff:inputs.tariff,systemType:inputs.systemType,panelWatts:inputs.panelWatts,inverter:inputs.inverter||"Por seleccionar",exchangeRate:inputs.exchangeRate},consumption,result,quoteItems:quoteItems(),proposalText,invoice:invoice||undefined,selectedEquipmentIds:[inputs.panelEquipmentId,selectedInverter?.id,selectedBattery?.id].filter((id):id is string=>Boolean(id))};
-  }
   async function exportProposal(format:"docx"|"pdf") {
     if (!result) return;
     setExporting(format);
+    setSaveMessage("");
     try {
-      if (editingId) {
-        const response = await fetch(`/api/proposals/${format}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({proposalId:editingId})});
-        if (!response.ok) throw new Error(await response.text());
-        const blob=await response.blob(); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url;a.download=`${(editingNumber||"propuesta").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.${format}`;a.click();URL.revokeObjectURL(url); return;
+      setSaving(true);
+      const saved = await persistProposal();
+      const proposalId = saved.id;
+      const proposalNumber = saved.number;
+      setSaveMessage(`Propuesta ${saved.number} actualizada antes de exportar.`);
+      const response = await fetch(`/api/proposals/${format}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({proposalId})});
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || `No se pudo generar el ${format.toUpperCase()}.`);
       }
-      const fullPayload = proposalPayload();
-      if (!fullPayload) return;
-      let payload = fullPayload;
-      if (JSON.stringify(payload).length > 3_000_000) {
-        payload = { ...fullPayload, company: { ...fullPayload.company, logoBase64: undefined, coverImageBase64: undefined, backCoverImageBase64: undefined } };
-        setSaveMessage("La propuesta es grande; se generará sin imágenes incrustadas para evitar el límite de Vercel.");
-      }
-      const response = await fetch(`/api/proposals/${format}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      if (!response.ok) throw new Error(await response.text());
-      const blob=await response.blob(); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url;a.download=`propuesta-${(inputs.client||"solar").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.${format}`;a.click();URL.revokeObjectURL(url);
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=`${(proposalNumber||"propuesta").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       setSaveMessage(error instanceof Error ? `Error al exportar ${format.toUpperCase()}: ${error.message}` : "No se pudo exportar la propuesta.");
-    } finally { setExporting(null); }
+    } finally {
+      setSaving(false);
+      setExporting(null);
+    }
   }
 
   return <div className="mx-auto max-w-7xl space-y-6">
