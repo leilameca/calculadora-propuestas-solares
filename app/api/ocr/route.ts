@@ -18,7 +18,8 @@ async function createOcrWorker(){
   const cachePath=join(tmpdir(),"heliopro-tesseract");
   await mkdir(cachePath,{recursive:true});
   const workerPath=join(process.cwd(),"node_modules","tesseract.js","src","worker-script","node","index.js");
-  return createWorker("spa",1,{cachePath,workerPath});
+  const langPath=join(process.cwd(),"lib","ocr-data");
+  return createWorker("spa",1,{cachePath,workerPath,langPath,gzip:false});
 }
 async function prepareImage(bytes:Uint8Array){
   const source=sharp(Buffer.from(bytes),{limitInputPixels:20_000_000}).rotate();

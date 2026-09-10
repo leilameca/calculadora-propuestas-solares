@@ -7,8 +7,11 @@ const nextConfig: NextConfig = {
     "/api/ocr": [
       "./node_modules/pdfjs-dist/legacy/build/**/*",
       "./node_modules/pdfjs-dist/standard_fonts/**/*",
+      "./lib/ocr-data/**/*",
+      "./node_modules/bmp-js/**/*",
       "./node_modules/tesseract.js/src/**/*",
       "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/wasm-feature-detect/**/*",
     ],
   },
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js", "tesseract.js-core"],
