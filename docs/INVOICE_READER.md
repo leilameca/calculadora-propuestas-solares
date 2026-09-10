@@ -6,7 +6,7 @@
 
 1. PDF.js extrae texto del flujo original, copiando bytes para que el worker no invalide el original.
 2. Si no es suficiente, reconstruye filas por Y (tolerancia de 2 puntos) y ordena por X. El parser reconoce filas y tablas horizontales mes/valor usando contexto de histórico. No toma indiscriminadamente importes de pago como consumo.
-3. Si faltan 12 meses o confianza >= 0.8, rasteriza hasta 12 páginas, con límites de píxeles, y usa Tesseract español. Imágenes pasan directamente por OCR, después de validar el archivo y normalizar contraste/tamaño con sharp. Los workers y loading tasks se destruyen en finally. Las fuentes de PDF.js viajan con el despliegue.
+3. Si hay menos de 12 meses o confianza < 0.8, rasteriza hasta 12 páginas, con límites de píxeles, y usa Tesseract español. Imágenes pasan directamente por OCR, después de validar el archivo y normalizar contraste/tamaño con sharp. Los workers y loading tasks se destruyen en finally. Las fuentes de PDF.js viajan con el despliegue.
 4. Textract es opcional cuando el resultado local es insuficiente. Usa bucket AWS separado, key opaca por empresa, paginación NextToken y eliminación temporal aun si falla el inicio. Se recomienda lifecycle del bucket como segunda protección frente a interrupción de proceso.
 5. StructuredBillExtractor es un punto de extensión opcional. No hay modelo IA ni envío automático a un proveedor nuevo. Un resultado futuro debe pasar el schema y las mismas validaciones; texto de factura se trata como datos, nunca instrucciones.
 
@@ -39,6 +39,8 @@ NIC ya no se rellena automáticamente con un contrato. Cuando solo aparece contr
 
 ## Límites y futuras distribuidoras
 
-PDF protegido, tablas separadas en columnas sin correspondencia espacial, gráficos sin valores impresos, caracteres OCR confundidos, meses sin año ancla y documentos excesivos pueden necesitar entrada manual. Tesseract necesita acceder a su idioma español durante la primera inicialización (o caché de despliegue); los fallos se muestran al usuario. Límite de CPU/tiempo del hosting puede requerir jobs asíncronos en la siguiente etapa. Configurar rate limiting distribuido en el despliegue antes de cargas comerciales intensivas.
+PDF protegido, tablas separadas en columnas sin correspondencia espacial, gráficos sin valores impresos, caracteres OCR confundidos, meses sin año ancla y documentos excesivos pueden necesitar entrada manual. Tesseract utiliza una caché en el directorio temporal del sistema (no en la carpeta de código de un hosting de solo lectura). Necesita acceder a su idioma español durante la primera inicialización (o caché de despliegue); los fallos se muestran al usuario. Límite de CPU/tiempo del hosting puede requerir jobs asíncronos en la siguiente etapa. Configurar rate limiting distribuido en el despliegue antes de cargas comerciales intensivas.
 
 EDEESTE y EDESUR mantienen lectura genérica con warning. Para soporte específico: añadir fixtures anonimizados de cada layout, extraer un adaptador por distribuidora que devuelva ParsedUtilityBill, conectarlo al dispatcher de parseUtilityBill y reutilizar validateBill/pipeline/revisión sin duplicar APIs. No declarar equivalencia con Edenorte sin pruebas de las columnas propias.
+
+Prueba OCR real reproducible sin datos privados: `npx tsx scripts/verify-invoice-ocr.ts`. Genera una factura sintética, la rasteriza, ejecuta Tesseract español y verifica 12 meses. Requiere descarga inicial del idioma o caché en tmp/tesseract. En la verificación final recuperó EDENORTE, 12 meses y confianza 1.

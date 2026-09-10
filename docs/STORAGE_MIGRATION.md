@@ -12,7 +12,7 @@ StoredFile guarda companyId, proveedor, key opaca, nombre saneado, tamaño, MIME
 - STORAGE_FORCE_PATH_STYLE: `true` si el endpoint lo requiere.
 - STORAGE_LOCAL_DIR: directorio privado local de desarrollo, por defecto `.storage` (ignorado).
 
-Mantener el mismo bucket/endpoint para los objetos existentes. Cambiar de proveedor exige copiar y verificar objetos y actualizar metadata explícitamente. Habilitar cifrado, backups/versionado y políticas de mínimo privilegio en el servicio elegido. Límites: 4 MiB por archivo, formatos PDF/PNG/JPEG/WebP, firma/decodificación de imágenes y 20 millones de píxeles. La validación no sustituye un antivirus; anexos PDF se importan como páginas, no se ejecutan. El bucket no debe servir contenido activo públicamente.
+Mantener el mismo bucket/endpoint para los objetos existentes. Cambiar de proveedor exige copiar y verificar objetos y actualizar metadata explícitamente. Habilitar cifrado, backups/versionado y políticas de mínimo privilegio en el servicio elegido. Límites: 4 MiB por archivo, formatos PDF/PNG/JPEG/WebP, firma/decodificación de imágenes y 20 millones de píxeles; para PDF, apertura válida de 1–20 páginas y rechazo de acciones automáticas, JavaScript y archivos incrustados detectables. La validación no sustituye un antivirus; anexos PDF se importan como páginas, no se ejecutan. El bucket no debe servir contenido activo públicamente.
 
 ## Secuencia segura
 
@@ -29,3 +29,5 @@ No se ejecuta esta migración de datos ni una migración contra producción como
 ## Compatibilidad y operación
 
 Las nuevas escrituras no guardan Base64; una actualización fallida después de subir puede dejar metadata/objeto huérfano, nunca una referencia a bytes no verificados. Delete existe en el adaptador, pero no se expone una API de borrado general que pudiera romper propuestas que comparten archivos. Para recolección futura se necesita analizar referencias y retención. El manifiesto es requisito de rollback, no una segunda base permanente de archivos. Las imágenes URL externas heredadas requieren importación explícita, no fetch automático del servidor.
+
+Inventario de solo lectura: `npx tsx scripts/verify-stabilization-db.ts`. No imprime datos personales y abre una transacción READ ONLY. El dry-run de migrate-storage se ejecutó correctamente y encontró 13 campos candidatos; no se ejecutó --apply ni --rollback contra la BD disponible.

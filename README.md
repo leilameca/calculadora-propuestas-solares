@@ -10,7 +10,7 @@ Aplicación Next.js (App Router), TypeScript, Tailwind CSS, Prisma y PostgreSQL 
 4. Cree la cuenta inicial con `npm run db:seed`.
 5. Inicie el entorno con `npm run dev`.
 
-En desarrollo el dashboard puede abrirse sin sesión. Defina `ALLOW_DEV_DASHBOARD=false` para probar el acceso obligatorio. En producción el middleware siempre exige una sesión firmada.
+El dashboard exige sesión también en desarrollo. Solo para demos locales puede activar explícitamente `ALLOW_DEV_DASHBOARD=true`; las APIs siguen exigiendo autenticación. En producción el middleware siempre exige una sesión firmada.
 
 ## Módulos
 
@@ -19,13 +19,14 @@ En desarrollo el dashboard puede abrirse sin sesión. Defina `ALLOW_DEV_DASHBOAR
 - Clientes, inventario y selección explícita de inversor.
 - Cálculo solar con HSP, tarifas, estacionalidad, degradación, ROI y CO2 trasladados del prototipo.
 - Modo de diseño automático (según consumo) o manual (cantidad de paneles).
-- OCR de imágenes con Tesseract.js. Para PDFs multipágina configure `AWS_REGION` y `AWS_TEXTRACT_S3_BUCKET`.
+- Facturas: texto PDF, reconstrucción de layout, OCR Tesseract y Textract opcional; revisión editable antes de confirmar.
 - Exportación `.docx` editable de ocho páginas con encabezado, pie, métricas, tablas y colores del tenant.
 - Persistencia de propuestas con generación automática de número `PROP-YYYY-NNN`, creación de clientes y estado comercial.
 
 ## Verificación
 
-- `npm test`: pruebas de la matemática solar y del promedio facturado.
+- `npm test`: matemática solar, parser, exportaciones, almacenamiento y autorización con dobles de Prisma.
+- `npm run lint`: ESLint/TypeScript; Next.js 16 ya no proporciona `next lint`.
 - `npm run typecheck`: validación TypeScript estricta.
 - `npm run build`: compilación de producción.
 - `npx tsx scripts/verify-database.ts`: verifica conexión, empresas, usuarios y migraciones aplicadas.
@@ -78,3 +79,10 @@ vercel --prod
 ```
 
 El archivo `vercel.json` ya está configurado con el framework Next.js y el comando de build.
+## Estabilización de almacenamiento, facturas y exportaciones
+
+Consulte [auditoría técnica](docs/TECHNICAL_AUDIT.md), [migración de archivos](docs/STORAGE_MIGRATION.md), [lector de facturas](docs/INVOICE_READER.md) y [arquitectura PDF/DOCX](docs/PDF_ARCHITECTURE.md).
+
+Los archivos nuevos se guardan en Object Storage privado (S3 compatible) y PostgreSQL conserva referencias/metadata. En desarrollo se permite `.storage/`; en producción configure `STORAGE_PROVIDER=s3` y las variables de `.env.example`. Antes de desplegar este cambio aplique `npx prisma migrate deploy` y genere el cliente con `npx prisma generate`. Los blobs antiguos siguen siendo legibles; su migración es un comando explícito con rollback, no un borrado automático.
+
+La migración de datos no debe ejecutarse sobre producción sin respaldo y ensayo en staging. Para la entrega y verificaciones de esta etapa consulte [el reporte](docs/REFACTOR_REPORT.md).

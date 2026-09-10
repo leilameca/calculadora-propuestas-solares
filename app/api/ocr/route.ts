@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { apiHandler, readForm } from "@/lib/api-handler";
 import { NextRequest, NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
@@ -11,6 +14,11 @@ import { sessionFromRequest } from "@/lib/auth";
 import sharp from "sharp";
 import { renderPdfPages } from "@/lib/pdf-images";
 export const runtime="nodejs"; export const maxDuration=300;
+async function createOcrWorker(){
+  const cachePath=join(tmpdir(),"heliopro-tesseract");
+  await mkdir(cachePath,{recursive:true});
+  return createWorker("spa",1,{cachePath});
+}
 async function prepareImage(bytes:Uint8Array){
   const source=sharp(Buffer.from(bytes),{limitInputPixels:20_000_000}).rotate();
   const metadata=await source.metadata();
@@ -18,12 +26,12 @@ async function prepareImage(bytes:Uint8Array){
 }
 async function recognizeImage(bytes:Uint8Array){
   const prepared=await prepareImage(bytes);
-  const worker=await createWorker("spa");
+  const worker=await createOcrWorker();
   try{ return (await worker.recognize(prepared)).data.text; } finally { await worker.terminate(); }
 }
 async function recognizeScannedPdf(bytes:Uint8Array){
   const pages=await renderPdfPages(bytes,12,1.8);
-  const worker=await createWorker("spa");
+  const worker=await createOcrWorker();
   try{
     const texts:string[]=[];
     for(const page of pages)texts.push((await worker.recognize(await prepareImage(page))).data.text);

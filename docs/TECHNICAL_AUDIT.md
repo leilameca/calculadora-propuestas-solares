@@ -53,3 +53,11 @@ Las guías de PDF y documentos se usarán para verificación visual de muestras 
 - [PDF.js: LoadingTask](https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib-PDFDocumentLoadingTask.html) — ciclo de vida y destrucción del worker.
 
 El estado final de correcciones, verificaciones y restricciones externas se registra separadamente en la entrega; este documento conserva el diagnóstico inicial.
+
+## Verificación posterior de solo lectura
+
+Durante la implementación se consultó la BD sin escribir registros: 2 empresas, 3 clientes, 6 equipos y 4 propuestas. Se encontraron 9 899 080 bytes aproximados en columnas con contenido codificado: documentos de equipos 6 335 916; imágenes de empresa 1 846 390; imágenes de clientes 802 982; imágenes de propuestas 802 982; logos de equipos 110 810. No había invoiceData Base64. No se encontraron propuestas cuyo cliente perteneciera a otra empresa. StoredFile aún no existe: la migración queda por aplicar.
+
+La verificación de los cuatro registros existentes detectó expansión de JPEG a PNG por encima del límite interno; se corrigió con reducción acotada y se añadió regresión. Los cuatro registros ya exportan PDF y DOCX en memoria, sin persistir documentos privados. La revisión visual detectó además glifos deformados en rasterización PDF.js y una página casi vacía en DOCX; ambos corregidos.
+
+La entrega final conserva dos avisos moderados de desarrollo en Vitest/@vitest/mocker (un mismo advisory); audit de producción no detecta vulnerabilidades. La actualización específica de Vitest se intentó sin force y fue bloqueada por un error interno de npm 10 (`edgesOut`). Se recuperó la instalación actual y se verificó nuevamente. No se modificó la pila de producción por ese aviso.
