@@ -52,6 +52,7 @@ export interface BilledConsumption {
 
 export interface SolarCalculationInput {
   consumption: number[];
+  averageConsumption?: number;
   hsp: number;
   oversizingFactor: number;
   panelWatts: number;
@@ -63,6 +64,15 @@ export interface SolarCalculationInput {
   manualPanelCount?: number;
   itbisEnabled?: boolean;
   itbisRate?: number;
+}
+
+export interface BilledAverageResult {
+  averageConsumption: number | null;
+  validPeriodCount: number;
+  expectedPeriodCount: number;
+  periods: BilledConsumption[];
+  missingPeriods: Array<{ month: number; year: number }>;
+  invalidPeriods: BilledConsumption[];
 }
 
 export interface SolarCalculationResult {
@@ -107,16 +117,75 @@ export function latestBilledAverage(records: BilledConsumption[], count: number)
   return window.reduce((sum, item) => sum + item.kwh, 0) / window.length;
 }
 
+export function billedPeriods(lastMonth: number, lastYear: number, count: number): Array<{ month: number; year: number }> {
+  if (!Number.isInteger(lastMonth) || lastMonth < 1 || lastMonth > 12) return [];
+  if (!Number.isInteger(lastYear) || lastYear < 2000 || lastYear > 2100) return [];
+  if (!Number.isInteger(count) || count < 1 || count > 12) return [];
+
+  const lastPeriod = lastYear * 12 + lastMonth - 1;
+  return Array.from({ length: count }, (_, index) => {
+    const period = lastPeriod - count + index + 1;
+    return { month: (period % 12) + 1, year: Math.floor(period / 12) };
+  });
+}
+
+export function calculateBilledAverage(
+  records: BilledConsumption[],
+  count: number,
+  lastMonth: number,
+  lastYear: number,
+): BilledAverageResult {
+  const expectedPeriods = billedPeriods(lastMonth, lastYear, count);
+  const recordsByPeriod = new Map<string, BilledConsumption>();
+  for (const record of records) {
+    recordsByPeriod.set(`${record.year}-${record.month}`, record);
+  }
+
+  const periods: BilledConsumption[] = [];
+  const missingPeriods: Array<{ month: number; year: number }> = [];
+  const invalidPeriods: BilledConsumption[] = [];
+
+  for (const period of expectedPeriods) {
+    const record = recordsByPeriod.get(`${period.year}-${period.month}`);
+    if (!record) {
+      missingPeriods.push(period);
+    } else if (!Number.isFinite(record.kwh) || record.kwh <= 0) {
+      invalidPeriods.push(record);
+    } else {
+      periods.push({ ...record });
+    }
+  }
+
+  const complete = expectedPeriods.length === count && periods.length === count;
+  return {
+    averageConsumption: complete
+      ? periods.reduce((sum, period) => sum + period.kwh, 0) / periods.length
+      : null,
+    validPeriodCount: periods.length,
+    expectedPeriodCount: count,
+    periods,
+    missingPeriods,
+    invalidPeriods,
+  };
+}
+
 export function calculateSolar(input: SolarCalculationInput): SolarCalculationResult {
   if (input.consumption.length !== 12) throw new Error("Se requieren exactamente 12 valores mensuales.");
   const numeric = [input.hsp, input.oversizingFactor, input.panelWatts, input.costPerWpUsd, input.exchangeRate];
   if (numeric.some((value) => !Number.isFinite(value) || value <= 0)) throw new Error("Los parámetros solares deben ser mayores que cero.");
 
-  const consumption = input.consumption.map((value) => Math.max(0, Number(value) || 0));
-  const annualConsumption = consumption.reduce((sum, value) => sum + value, 0);
-  if (annualConsumption <= 0) throw new Error("Debe existir al menos un consumo facturado.");
+  if (input.consumption.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new Error("Los consumos mensuales deben ser números finitos mayores o iguales a cero.");
+  }
+  if (input.averageConsumption !== undefined && (!Number.isFinite(input.averageConsumption) || input.averageConsumption <= 0)) {
+    throw new Error("El consumo promedio debe ser un número finito mayor que cero.");
+  }
 
-  const averageMonthlyConsumption = annualConsumption / 12;
+  const consumption = input.consumption.map(Number);
+  const recordedConsumption = consumption.reduce((sum, value) => sum + value, 0);
+  const averageMonthlyConsumption = input.averageConsumption ?? recordedConsumption / 12;
+  if (averageMonthlyConsumption <= 0) throw new Error("Debe existir al menos un consumo facturado.");
+  const annualConsumption = input.averageConsumption === undefined ? recordedConsumption : averageMonthlyConsumption * 12;
   const requiredKwp = (averageMonthlyConsumption / 30) / input.hsp;
   const adjustedKwp = requiredKwp * input.oversizingFactor;
   const theoreticalPanelCount = Math.ceil((requiredKwp * 1000) / input.panelWatts);

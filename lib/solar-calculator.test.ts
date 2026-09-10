@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateSolar, latestBilledAverage } from "./solar-calculator";
+import { calculateBilledAverage, calculateSolar, latestBilledAverage, type BilledConsumption } from "./solar-calculator";
 
 describe("solar calculator", () => {
   it("aplica el ITBIS comercial del 18% sin conservar la tasa legacy", () => {
@@ -62,5 +62,90 @@ describe("solar calculator", () => {
       { month: 12, year: 2025, kwh: 100 },
     ];
     expect(latestBilledAverage(records, 3)).toBe(200);
+  });
+});
+
+describe("promedio de períodos facturados", () => {
+  it("promedia seis períodos del mismo año", () => {
+    const records = [500, 550, 600, 650, 700, 793.02].map((kwh, index) => ({ month: index + 1, year: 2026, kwh }));
+    const result = calculateBilledAverage(records, 6, 6, 2026);
+
+    expect(result.averageConsumption).toBeCloseTo(632.17, 2);
+    expect(result.validPeriodCount).toBe(6);
+  });
+
+  it("cruza al año anterior según el último mes facturado", () => {
+    const records = [
+      { month: 10, year: 2025, kwh: 400 },
+      { month: 11, year: 2025, kwh: 500 },
+      { month: 12, year: 2025, kwh: 600 },
+      { month: 1, year: 2026, kwh: 700 },
+      { month: 2, year: 2026, kwh: 800 },
+      { month: 3, year: 2026, kwh: 900 },
+    ];
+    const result = calculateBilledAverage(records, 6, 3, 2026);
+
+    expect(result.averageConsumption).toBe(650);
+    expect(result.periods.map(({ month, year }) => `${month}-${year}`)).toEqual([
+      "10-2025", "11-2025", "12-2025", "1-2026", "2-2026", "3-2026",
+    ]);
+  });
+
+  it("acepta los doce períodos completos", () => {
+    const records = Array.from({ length: 12 }, (_, index) => ({ month: index + 1, year: 2026, kwh: (index + 1) * 100 }));
+    expect(calculateBilledAverage(records, 12, 12, 2026).averageConsumption).toBe(650);
+  });
+
+  it("no calcula si falta un valor seleccionado", () => {
+    const records = Array.from({ length: 5 }, (_, index) => ({ month: index + 1, year: 2026, kwh: 500 }));
+    const result = calculateBilledAverage(records, 6, 6, 2026);
+
+    expect(result.averageConsumption).toBeNull();
+    expect(result.validPeriodCount).toBe(5);
+    expect(result.missingPeriods).toEqual([{ month: 6, year: 2026 }]);
+  });
+
+  it("conserva la precisión de valores decimales", () => {
+    const records = [
+      { month: 1, year: 2026, kwh: 100.25 },
+      { month: 2, year: 2026, kwh: 200.75 },
+    ];
+    expect(calculateBilledAverage(records, 2, 2, 2026).averageConsumption).toBe(150.5);
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])("rechaza el consumo inválido %s", (kwh) => {
+    const result = calculateBilledAverage([{ month: 1, year: 2026, kwh }], 1, 1, 2026);
+
+    expect(result.averageConsumption).toBeNull();
+    expect(result.invalidPeriods).toHaveLength(1);
+  });
+
+  it("recalcula después de editar sin mutar ni reemplazar los consumos mensuales", () => {
+    const records: BilledConsumption[] = Array.from({ length: 6 }, (_, index) => ({ month: index + 1, year: 2026, kwh: 500 }));
+    const originalRecords = structuredClone(records);
+    expect(calculateBilledAverage(records, 6, 6, 2026).averageConsumption).toBe(500);
+    expect(records).toEqual(originalRecords);
+
+    const editedRecords = records.map((record) => record.month === 6 ? { ...record, kwh: 800 } : record);
+    expect(calculateBilledAverage(editedRecords, 6, 6, 2026).averageConsumption).toBe(550);
+    expect(records).toEqual(originalRecords);
+
+    const monthlyConsumption = [500, 500, 500, 500, 500, 800, 0, 0, 0, 0, 0, 0];
+    const originalConsumption = [...monthlyConsumption];
+    const calculation = calculateSolar({
+      consumption: monthlyConsumption,
+      averageConsumption: 550,
+      hsp: 4,
+      oversizingFactor: 1.2,
+      panelWatts: 500,
+      costPerWpUsd: 1,
+      exchangeRate: 60,
+      utility: "EDENORTE",
+      tariff: "BTS-1",
+    });
+
+    expect(calculation.averageMonthlyConsumption).toBe(550);
+    expect(monthlyConsumption).toEqual(originalConsumption);
+    expect(monthlyConsumption).not.toEqual(Array(12).fill(550));
   });
 });
