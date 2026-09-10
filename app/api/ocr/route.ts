@@ -1,5 +1,4 @@
 import { mkdir } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { apiHandler, readForm } from "@/lib/api-handler";
@@ -18,7 +17,7 @@ export const runtime="nodejs"; export const maxDuration=300;
 async function createOcrWorker(){
   const cachePath=join(tmpdir(),"heliopro-tesseract");
   await mkdir(cachePath,{recursive:true});
-  const workerPath=createRequire(import.meta.url).resolve("tesseract.js/src/worker-script/node/index.js");
+  const workerPath=join(process.cwd(),"node_modules","tesseract.js","src","worker-script","node","index.js");
   return createWorker("spa",1,{cachePath,workerPath});
 }
 async function prepareImage(bytes:Uint8Array){
