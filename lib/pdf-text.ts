@@ -1,4 +1,4 @@
-type PdfTextItem = {
+export type PdfTextItem = {
   str: string;
   transform: number[];
   width?: number;
@@ -10,7 +10,7 @@ function isPdfTextItem(item: unknown): item is PdfTextItem {
   return typeof candidate.str === "string" && Array.isArray(candidate.transform);
 }
 
-function groupItemsIntoLines(items: PdfTextItem[]): string[] {
+export function groupItemsIntoLines(items: PdfTextItem[]): string[] {
   const rows: Array<{ y: number; items: Array<{ x: number; text: string }> }> = [];
 
   for (const item of items) {
@@ -32,27 +32,31 @@ function groupItemsIntoLines(items: PdfTextItem[]): string[] {
     .filter(Boolean);
 }
 
-export async function extractEmbeddedPdfText(bytes: Uint8Array): Promise<string> {
+export async function extractPdfTextLayers(bytes: Uint8Array): Promise<{ text: string; layoutText: string }> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask = pdfjs.getDocument({
-    data: bytes,
+    data: bytes.slice(),
     disableFontFace: true,
     useSystemFonts: false,
     verbosity: 0,
   });
-  const document = await loadingTask.promise;
-
   try {
+    const document = await loadingTask.promise;
+    if (document.numPages > 12) throw new Error("La factura excede 12 p?ginas.");
+    const direct: string[] = [];
     const pages: string[] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
       const items = content.items.flatMap((item) => isPdfTextItem(item) ? [item as unknown as PdfTextItem] : []);
+      direct.push(items.map(item => item.str).join(" "));
       pages.push(groupItemsIntoLines(items).join("\n"));
       page.cleanup();
     }
-    return pages.join("\n\n").trim();
+    return { text: direct.join("\n\n").trim(), layoutText: pages.join("\n\n").trim() };
   } finally {
     await loadingTask.destroy();
   }
 }
+
+export async function extractEmbeddedPdfText(bytes: Uint8Array): Promise<string> { return (await extractPdfTextLayers(bytes)).layoutText; }

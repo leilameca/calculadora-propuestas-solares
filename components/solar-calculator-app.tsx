@@ -1,5 +1,8 @@
 "use client";
 
+import { InvoiceReview } from "./invoice-review";
+import type { ParsedUtilityBill } from "@/lib/utility-bill/types";
+import { ELECTRICITY_RATES } from "@/lib/solar-calculator";
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Calculator, Download, FileScan, Info, Loader2, Plus, Save, Upload } from "lucide-react";
@@ -29,6 +32,8 @@ export function SolarCalculatorApp() {
   const [useAverage, setUseAverage] = useState(false);
   const [lastBilledMonth,setLastBilledMonth]=useState(new Date().getMonth()+1);
   const [lastBilledYear,setLastBilledYear]=useState(new Date().getFullYear());
+  const [pendingBill,setPendingBill]=useState<{bill:ParsedUtilityBill;file:{name:string;mimeType:string;dataUrl:string}}|null>(null);
+  const [confirmedBill,setConfirmedBill]=useState<ParsedUtilityBill|null>(null);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [exporting, setExporting] = useState<"docx"|"pdf"|null>(null);
   const [saving, setSaving] = useState(false);
@@ -110,18 +115,24 @@ export function SolarCalculatorApp() {
     setOcrBusy(true);
     setOcrMessage("");
     try {
-      setInvoice({name:file.name,mimeType:file.type||"application/pdf",dataUrl:await fileToDataUrl(file)});
+      const pendingFile={name:file.name,mimeType:file.type||"application/pdf",dataUrl:await fileToDataUrl(file)};
       const form = new FormData(); form.append("file",file);
       const response = await fetch("/api/ocr",{method:"POST",body:form});
       const errorData = response.ok ? null : await response.json().catch(() => null);
       if (!response.ok) throw new Error(errorData?.error || "No fue posible leer la factura");
       const data = await response.json();
-      setInputs((old)=>({...old,client:data.customerName||old.client,nic:data.nic||old.nic,address:data.address||old.address,tariff:data.tariff||old.tariff,utility:data.utility||old.utility}));
-      if(data.requiresManualEntry){setOcrMessage("La factura se leyó parcialmente, pero no se encontró un historial de consumo suficiente. Revisa los datos y completa los consumos manualmente.");return;}
-      if (data.consumption?.length){const records=data.consumption as BilledConsumption[],latest=[...records].sort((a,b)=>(b.year-a.year)||(b.month-a.month))[0];setBilledRecords(records);setLastBilledMonth(latest.month);setLastBilledYear(latest.year);setConsumption(MONTHS.map((_,i)=>Number(records.find(x=>x.month===i+1)?.kwh||0)));setOcrMessage(`Factura ${data.utility||"eléctrica"} procesada: ${records.length} meses recientes, excluyendo cualquier mes base repetido.`);}
+      setPendingBill({bill:data as ParsedUtilityBill,file:pendingFile});
     } catch (error) {
       setOcrMessage(error instanceof Error ? error.message : "No fue posible leer la factura.");
     } finally { setOcrBusy(false); }
+  }
+  function confirmInvoice(bill:ParsedUtilityBill) {
+    if(!pendingBill)return;
+    setInvoice(pendingBill.file);setConfirmedBill(bill);
+    setInputs(old=>({...old,client:bill.customerName||old.client,nic:bill.nic||old.nic,address:bill.address||old.address,tariff:bill.tariff&&bill.tariff in ELECTRICITY_RATES?bill.tariff as Tariff:old.tariff,utility:bill.utility!=="UNKNOWN"?bill.utility:old.utility}));
+    const records=bill.consumptionHistory;
+    if(records.length){const latest=records.at(-1)!;setBilledRecords(records);setLastBilledMonth(latest.month);setLastBilledYear(latest.year);setConsumption(MONTHS.map((_,i)=>records.findLast(row=>row.month===i+1)?.kwh??0));}
+    setPendingBill(null);setOcrMessage(`Datos confirmados: ${records.length} meses. Complete los meses faltantes antes de calcular.`);
   }
   async function saveDraft() {
     if (!result) return;
@@ -147,7 +158,7 @@ export function SolarCalculatorApp() {
           utility: inputs.utility,
           tariff: inputs.tariff,
           monthlyConsumption: effectiveConsumption,
-          calculationInput: { ...inputs, batteryEquipmentId:selectedBattery?.id||null, hsp: HSP_BY_CITY[inputs.city], billedRecords, averageCount, useAverage,lastBilledMonth,lastBilledYear },
+          calculationInput: { ...inputs, utilityBill:confirmedBill, batteryEquipmentId:selectedBattery?.id||null, hsp: HSP_BY_CITY[inputs.city], billedRecords, averageCount, useAverage,lastBilledMonth,lastBilledYear },
           calculationResult: result,
           quoteItems: quoteItems(),
           selectedInverterId: selectedInverter?.id || null,
@@ -199,6 +210,7 @@ export function SolarCalculatorApp() {
   return <div className="mx-auto max-w-7xl space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-primary">{editingId?`Editando ${editingNumber||"propuesta"}`:"Nueva propuesta"}</p><h1 className="text-3xl font-black tracking-tight">Dimensionamiento solar</h1><p className="mt-1 text-sm text-slate-500">Calcula, compara y exporta una propuesta comercial editable.</p></div><div className="flex flex-col items-end gap-1"><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={saveDraft} disabled={!result||saving}>{saving?<Loader2 className="animate-spin" size={17}/>:<Save size={17}/>}{editingId?"Guardar cambios":"Guardar borrador"}</Button><Button variant="outline" onClick={()=>void exportProposal("pdf")} disabled={!result||Boolean(exporting)}>{exporting==="pdf"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar PDF</Button><Button onClick={()=>void exportProposal("docx")} disabled={!result||Boolean(exporting)}>{exporting==="docx"?<Loader2 className="animate-spin" size={17}/>:<Download size={17}/>}Exportar Word</Button></div>{saveMessage&&<p className="text-xs font-semibold text-primary">{saveMessage}</p>}</div></div>
 
+    {pendingBill&&<InvoiceReview initial={pendingBill.bill} onConfirm={confirmInvoice} onCancel={()=>setPendingBill(null)}/>}
     <Card className="border-dashed border-primary/30 bg-primary/[.03]"><CardContent className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary"><FileScan size={20}/></div><div><p className="text-sm font-bold">Lectura inteligente de factura eléctrica</p><p className="text-xs text-slate-500">PDF, PNG o JPG de EDENORTE, EDESUR o EDEESTE. Los formatos no reconocidos permiten completar los datos manualmente.</p>{ocrMessage&&<p className="mt-1 text-xs font-semibold text-primary">{ocrMessage}</p>}</div></div><label className={`inline-flex h-10 items-center gap-2 rounded-md border bg-white px-4 text-sm font-semibold hover:bg-slate-50 ${ocrBusy?"cursor-wait opacity-60":"cursor-pointer"}`}><input type="file" accept="image/png,image/jpeg,.pdf" disabled={ocrBusy} className="hidden" onChange={e=>{const file=e.target.files?.[0];e.currentTarget.value="";void scan(file)}}/>{ocrBusy?<Loader2 size={17} className="animate-spin"/>:<Upload size={17}/>}Analizar factura</label></CardContent></Card>
 
     <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
